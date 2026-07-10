@@ -1,0 +1,441 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+<title>Organiza+</title>
+<meta name="theme-color" content="#FF8A00" />
+<style>
+  body { margin: 0; background: #F8F9F7; font-family: 'Nunito Sans', system-ui, -apple-system, sans-serif; }
+  * { box-sizing: border-box; }
+  input, select { font-family: inherit; }
+</style>
+<script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+<script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+<script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+</head>
+<body>
+<div id="root"></div>
+<script type="text/babel">
+const { useState, useEffect, useCallback } = React;
+
+const ORANGE = '#FF8A00';
+const GREEN = '#1D5E3A';
+const OFFWHITE = '#F8F9F7';
+const GRAYLIGHT = '#E5E7E2';
+const DARK = '#333333';
+
+const STORAGE_KEY = 'organiza-mais-data-v1';
+const todayStr = () => new Date().toISOString().split('T')[0];
+const fmt = (n) => (n || 0).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
+const uid = () => Math.random().toString(36).slice(2, 10);
+
+// "Memória" do navegador, no mesmo formato que usávamos antes
+const storage = {
+  async get(key) {
+    const v = localStorage.getItem(key);
+    return v !== null ? { key, value: v } : null;
+  },
+  async set(key, value) {
+    localStorage.setItem(key, value);
+    return { key, value };
+  },
+};
+
+const seed = {
+  products: [
+    { id: uid(), name: 'Frango caipira', category: 'Carnes', buyPrice: 18, sellPrice: 28, qty: 12, minQty: 5 },
+    { id: uid(), name: 'Ovos (dúzia)', category: 'Ovos', buyPrice: 6, sellPrice: 10, qty: 4, minQty: 6 },
+    { id: uid(), name: 'Feijão (kg)', category: 'Grãos', buyPrice: 5, sellPrice: 8, qty: 20, minQty: 8 },
+  ],
+  sales: [],
+  expenses: [],
+  manualCash: [],
+  alloc: { profit: 10, salary: 50, restock: 40 },
+  userName: '',
+};
+
+const PERIOD_LABELS = { hoje: 'Hoje', semana: 'Últimos 7 dias', mes: 'Este mês', tudo: 'Desde o início' };
+
+function withinPeriod(dateStr, period) {
+  if (period === 'tudo') return true;
+  const d = new Date(dateStr + 'T00:00:00');
+  const now = new Date();
+  if (period === 'hoje') return dateStr === todayStr();
+  if (period === 'semana') return (now - d) / (1000 * 60 * 60 * 24) <= 7;
+  if (period === 'mes') return d.getMonth() === now.getMonth() && d.getFullYear() === now.getFullYear();
+  return true;
+}
+
+const inputStyle = {
+  width: '100%', padding: '10px 12px', borderRadius: 10, border: `1px solid ${GRAYLIGHT}`,
+  fontSize: 15, boxSizing: 'border-box', background: '#fff', color: DARK,
+};
+const bigButton = (bg) => ({
+  width: '100%', padding: '14px', borderRadius: 12, border: 'none', background: bg,
+  color: '#fff', fontSize: 16, fontWeight: 700, cursor: 'pointer',
+});
+const smallBtn = {
+  padding: '6px 10px', borderRadius: 8, border: `1px solid ${GRAYLIGHT}`, background: '#fff',
+  cursor: 'pointer', fontWeight: 700, fontSize: 13, color: DARK,
+};
+
+function Tab({ emoji, label, active, onClick }) {
+  return (
+    <button onClick={onClick} style={{
+      display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 4,
+      flex: 1, padding: '8px 0', background: 'none', border: 'none', cursor: 'pointer',
+      color: active ? ORANGE : '#8a8a86',
+    }}>
+      <span style={{ fontSize: 20 }}>{emoji}</span>
+      <span style={{ fontSize: 11, fontWeight: active ? 600 : 400 }}>{label}</span>
+    </button>
+  );
+}
+
+function Card({ children, style }) {
+  return <div style={{ background: '#fff', borderRadius: 14, padding: 16, boxShadow: '0 1px 3px rgba(0,0,0,0.06)', ...style }}>{children}</div>;
+}
+
+function Modal({ title, onClose, children }) {
+  return (
+    <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.4)', display: 'flex', alignItems: 'flex-end', justifyContent: 'center', zIndex: 50 }} onClick={onClose}>
+      <div onClick={(e) => e.stopPropagation()} style={{ background: OFFWHITE, width: '100%', maxWidth: 480, borderRadius: '20px 20px 0 0', padding: 20, maxHeight: '85vh', overflowY: 'auto' }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
+          <h2 style={{ margin: 0, fontSize: 18, fontWeight: 700, color: DARK }}>{title}</h2>
+          <button onClick={onClose} style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: 20, color: '#8a8a86' }}>✕</button>
+        </div>
+        {children}
+      </div>
+    </div>
+  );
+}
+
+function Field({ label, children }) {
+  return (
+    <div style={{ marginBottom: 14 }}>
+      <label style={{ display: 'block', fontSize: 13, fontWeight: 600, color: DARK, marginBottom: 6 }}>{label}</label>
+      {children}
+    </div>
+  );
+}
+
+function WelcomeModal({ onConfirm }) {
+  const [name, setName] = useState('');
+  return (
+    <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.4)', display: 'flex', alignItems: 'flex-end', justifyContent: 'center', zIndex: 50 }}>
+      <div style={{ background: OFFWHITE, width: '100%', maxWidth: 480, borderRadius: '20px 20px 0 0', padding: 24 }}>
+        <div style={{ fontSize: 20, fontWeight: 700, color: DARK, marginBottom: 6 }}>Bem-vindo(a) ao Organiza+</div>
+        <div style={{ fontSize: 14, color: '#8a8a86', marginBottom: 16 }}>Como você gostaria de ser chamado(a)?</div>
+        <input autoFocus style={inputStyle} placeholder="Seu nome" value={name}
+          onChange={(e) => setName(e.target.value)}
+          onKeyDown={(e) => { if (e.key === 'Enter' && name.trim()) onConfirm(name.trim()); }} />
+        <button style={{ ...bigButton(ORANGE), marginTop: 16 }} disabled={!name.trim()} onClick={() => onConfirm(name.trim())}>Começar</button>
+      </div>
+    </div>
+  );
+}
+
+function VendaModal({ products, onClose, onConfirm }) {
+  const [productId, setProductId] = useState(products[0]?.id || '');
+  const [qty, setQty] = useState(1);
+  const [payment, setPayment] = useState('Dinheiro');
+  const p = products.find((x) => x.id === productId);
+  const value = p ? p.sellPrice * qty : 0;
+  return (
+    <Modal title="Registrar venda" onClose={onClose}>
+      <Field label="Produto">
+        <select style={inputStyle} value={productId} onChange={(e) => setProductId(e.target.value)}>
+          {products.map((p) => <option key={p.id} value={p.id}>{p.name} (estoque: {p.qty})</option>)}
+        </select>
+      </Field>
+      <Field label="Quantidade"><input type="number" min="1" style={inputStyle} value={qty} onChange={(e) => setQty(parseInt(e.target.value) || 1)} /></Field>
+      <Field label="Forma de pagamento">
+        <select style={inputStyle} value={payment} onChange={(e) => setPayment(e.target.value)}>
+          <option>Dinheiro</option><option>Cartão</option><option>Pix</option>
+        </select>
+      </Field>
+      <div style={{ fontSize: 14, color: DARK, marginBottom: 14 }}>Total: <strong>{fmt(value)}</strong></div>
+      <button style={bigButton(ORANGE)} disabled={!p || qty < 1 || qty > (p?.qty || 0)} onClick={() => onConfirm({ productId, qty, value, payment })}>Confirmar venda</button>
+      {p && qty > p.qty && <div style={{ color: '#c0392b', fontSize: 13, marginTop: 8 }}>Quantidade maior que o estoque disponível</div>}
+    </Modal>
+  );
+}
+
+function ProdutoModal({ onClose, onConfirm }) {
+  const [name, setName] = useState('');
+  const [category, setCategory] = useState('');
+  const [buyPrice, setBuyPrice] = useState('');
+  const [sellPrice, setSellPrice] = useState('');
+  const [qty, setQty] = useState('');
+  const [minQty, setMinQty] = useState('5');
+  const valid = name && buyPrice !== '' && sellPrice !== '' && qty !== '';
+  return (
+    <Modal title="Novo produto" onClose={onClose}>
+      <Field label="Nome do produto"><input style={inputStyle} value={name} onChange={(e) => setName(e.target.value)} /></Field>
+      <Field label="Categoria (opcional)"><input style={inputStyle} value={category} onChange={(e) => setCategory(e.target.value)} /></Field>
+      <Field label="Preço de compra (R$)"><input type="number" style={inputStyle} value={buyPrice} onChange={(e) => setBuyPrice(e.target.value)} /></Field>
+      <Field label="Preço de venda (R$)"><input type="number" style={inputStyle} value={sellPrice} onChange={(e) => setSellPrice(e.target.value)} /></Field>
+      <Field label="Quantidade em estoque"><input type="number" style={inputStyle} value={qty} onChange={(e) => setQty(e.target.value)} /></Field>
+      <Field label="Estoque mínimo"><input type="number" style={inputStyle} value={minQty} onChange={(e) => setMinQty(e.target.value)} /></Field>
+      {buyPrice !== '' && sellPrice !== '' && (
+        <div style={{ fontSize: 13, color: GREEN, marginBottom: 14 }}>Você lucra {fmt(parseFloat(sellPrice || 0) - parseFloat(buyPrice || 0))} em cada unidade vendida</div>
+      )}
+      <button style={bigButton(GREEN)} disabled={!valid} onClick={() => onConfirm({ name, category: category || 'Geral', buyPrice: parseFloat(buyPrice), sellPrice: parseFloat(sellPrice), qty: parseInt(qty), minQty: parseInt(minQty) || 5 })}>Salvar produto</button>
+    </Modal>
+  );
+}
+
+function DespesaModal({ onClose, onConfirm }) {
+  const [category, setCategory] = useState('Aluguel');
+  const [value, setValue] = useState('');
+  return (
+    <Modal title="Nova despesa" onClose={onClose}>
+      <Field label="Categoria">
+        <select style={inputStyle} value={category} onChange={(e) => setCategory(e.target.value)}>
+          <option>Aluguel</option><option>Energia</option><option>Água</option><option>Funcionários</option><option>Transporte</option><option>Compras</option><option>Outras</option>
+        </select>
+      </Field>
+      <Field label="Valor (R$)"><input type="number" style={inputStyle} value={value} onChange={(e) => setValue(e.target.value)} /></Field>
+      <button style={bigButton(GREEN)} disabled={!value || parseFloat(value) <= 0} onClick={() => onConfirm({ category, value: parseFloat(value) })}>Salvar despesa</button>
+    </Modal>
+  );
+}
+
+function AllocRow({ label, color, pct, value, onChange }) {
+  return (
+    <div>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 4 }}>
+        <span style={{ fontSize: 13, color: DARK }}>{label}</span>
+        <span style={{ fontSize: 14, fontWeight: 700, color }}>{fmt(value)}</span>
+      </div>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+        <input type="range" min="0" max="100" value={pct} onChange={(e) => onChange(parseInt(e.target.value))} style={{ flex: 1, accentColor: color }} />
+        <span style={{ fontSize: 12, color: '#8a8a86', width: 34, textAlign: 'right' }}>{pct}%</span>
+      </div>
+    </div>
+  );
+}
+
+function App() {
+  const [data, setData] = useState(seed);
+  const [loaded, setLoaded] = useState(false);
+  const [tab, setTab] = useState('inicio');
+  const [modal, setModal] = useState(null);
+  const [balancoPeriodo, setBalancoPeriodo] = useState('mes');
+
+  useEffect(() => {
+    (async () => {
+      try {
+        const res = await storage.get(STORAGE_KEY);
+        if (res && res.value) {
+          const parsed = JSON.parse(res.value);
+          setData(parsed);
+          if (!parsed.userName) setModal('boasvindas');
+        } else {
+          setModal('boasvindas');
+        }
+      } catch (e) {
+        setModal('boasvindas');
+      }
+      setLoaded(true);
+    })();
+  }, []);
+
+  const persist = useCallback((next) => {
+    setData(next);
+    storage.set(STORAGE_KEY, JSON.stringify(next)).catch(() => {});
+  }, []);
+
+  if (!loaded) return <div style={{ padding: 40, textAlign: 'center', color: '#8a8a86' }}>Carregando…</div>;
+
+  const { products, sales, expenses, manualCash } = data;
+  const alloc = data.alloc || { profit: 10, salary: 50, restock: 40 };
+  const balancoSales = sales.filter((s) => withinPeriod(s.date, balancoPeriodo));
+  const balancoTotal = balancoSales.reduce((a, s) => a + s.value, 0);
+  const allocSum = alloc.profit + alloc.salary + alloc.restock;
+  const todaySales = sales.filter((s) => s.date === todayStr());
+  const revenueToday = todaySales.reduce((a, s) => a + s.value, 0);
+  const profitToday = todaySales.reduce((a, s) => a + s.profit, 0);
+  const todayExpenses = expenses.filter((e) => e.date === todayStr()).reduce((a, e) => a + e.value, 0);
+  const cashBalance = sales.reduce((a, s) => a + s.value, 0) - expenses.reduce((a, e) => a + e.value, 0) + manualCash.reduce((a, m) => a + (m.type === 'entrada' ? m.value : -m.value), 0);
+  const lowStock = products.filter((p) => p.qty <= p.minQty);
+
+  const addProduct = (p) => persist({ ...data, products: [...products, { ...p, id: uid() }] });
+  const deleteProduct = (id) => persist({ ...data, products: products.filter((p) => p.id !== id) });
+  const adjustStock = (id, delta) => persist({ ...data, products: products.map((p) => (p.id === id ? { ...p, qty: Math.max(0, p.qty + delta) } : p)) });
+  const registerSale = ({ productId, qty, value, payment }) => {
+    const p = products.find((x) => x.id === productId);
+    if (!p) return;
+    const profit = value - p.buyPrice * qty;
+    const sale = { id: uid(), productId, productName: p.name, qty, value, payment, profit, date: todayStr() };
+    persist({ ...data, sales: [sale, ...sales], products: products.map((x) => (x.id === productId ? { ...x, qty: Math.max(0, x.qty - qty) } : x)) });
+  };
+  const updateAlloc = (field, val) => persist({ ...data, alloc: { ...alloc, [field]: val } });
+  const addExpense = (e) => persist({ ...data, expenses: [{ ...e, id: uid(), date: todayStr() }, ...expenses] });
+  const addManualCash = (m) => persist({ ...data, manualCash: [{ ...m, id: uid(), date: todayStr() }, ...manualCash] });
+
+  return (
+    <div style={{ fontFamily: '"Nunito Sans", system-ui, sans-serif', background: OFFWHITE, minHeight: '100vh', maxWidth: 480, margin: '0 auto' }}>
+      <div style={{ background: ORANGE, padding: '18px 20px', color: '#fff' }}>
+        <div style={{ fontSize: 13, opacity: 0.9 }}>{data.userName ? `Olá, ${data.userName}! 👋` : 'Olá! 👋'}</div>
+        <div style={{ fontSize: 20, fontWeight: 700 }}>Organiza+</div>
+      </div>
+
+      <div style={{ padding: 16, paddingBottom: 90 }}>
+        {tab === 'inicio' && (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+            <Card>
+              <div style={{ fontSize: 13, color: '#8a8a86', marginBottom: 8 }}>Resumo de hoje</div>
+              <div style={{ display: 'flex', gap: 16 }}>
+                <div><div style={{ fontSize: 12, color: '#8a8a86' }}>Faturamento</div><div style={{ fontSize: 20, fontWeight: 700, color: GREEN }}>{fmt(revenueToday)}</div></div>
+                <div><div style={{ fontSize: 12, color: '#8a8a86' }}>Lucro</div><div style={{ fontSize: 20, fontWeight: 700, color: GREEN }}>{fmt(profitToday)}</div></div>
+                <div><div style={{ fontSize: 12, color: '#8a8a86' }}>Vendas</div><div style={{ fontSize: 20, fontWeight: 700, color: DARK }}>{todaySales.length}</div></div>
+              </div>
+            </Card>
+            <Card>
+              <div style={{ fontSize: 13, color: '#8a8a86', marginBottom: 4 }}>Caixa</div>
+              <div style={{ fontSize: 22, fontWeight: 700, color: DARK }}>{fmt(cashBalance)}</div>
+              <div style={{ fontSize: 12, color: '#8a8a86', marginTop: 2 }}>Gastos hoje: {fmt(todayExpenses)}</div>
+            </Card>
+            {lowStock.length > 0 && (
+              <Card style={{ background: '#FFF4E5', border: `1px solid ${ORANGE}` }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8, color: ORANGE, fontWeight: 700, fontSize: 14 }}>⚠️ Estoque baixo</div>
+                <div style={{ fontSize: 13, color: DARK, marginTop: 6 }}>{lowStock.map((p) => p.name).join(', ')} — {lowStock.length} produto(s) precisam de reposição</div>
+              </Card>
+            )}
+            <button onClick={() => setModal('venda')} style={bigButton(ORANGE)}>+ Registrar venda</button>
+            <Card>
+              <div style={{ fontSize: 13, color: '#8a8a86', marginBottom: 8 }}>Últimas vendas</div>
+              {sales.slice(0, 5).map((s) => (
+                <div key={s.id} style={{ display: 'flex', justifyContent: 'space-between', padding: '6px 0', fontSize: 14, borderBottom: `1px solid ${GRAYLIGHT}` }}>
+                  <span>{s.productName} × {s.qty}</span><span style={{ fontWeight: 600 }}>{fmt(s.value)}</span>
+                </div>
+              ))}
+              {sales.length === 0 && <div style={{ fontSize: 13, color: '#8a8a86' }}>Nenhuma venda ainda</div>}
+            </Card>
+          </div>
+        )}
+
+        {tab === 'produtos' && (
+          <div>
+            <button onClick={() => setModal('produto')} style={{ ...bigButton(GREEN), marginBottom: 14 }}>+ Novo produto</button>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+              {products.map((p) => (
+                <Card key={p.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                  <div>
+                    <div style={{ fontWeight: 700, color: DARK }}>{p.name}</div>
+                    <div style={{ fontSize: 12, color: '#8a8a86' }}>{p.category} · Estoque: {p.qty}</div>
+                    <div style={{ fontSize: 12, color: GREEN, marginTop: 2 }}>Lucro por unidade: {fmt(p.sellPrice - p.buyPrice)}</div>
+                  </div>
+                  <button onClick={() => deleteProduct(p.id)} style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: 16 }}>🗑️</button>
+                </Card>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {tab === 'estoque' && (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+            {products.map((p) => (
+              <Card key={p.id}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                  <div>
+                    <div style={{ fontWeight: 700, color: DARK }}>{p.name}</div>
+                    <div style={{ fontSize: 13, color: p.qty <= p.minQty ? ORANGE : '#8a8a86' }}>{p.qty} em estoque {p.qty <= p.minQty && '· repor!'}</div>
+                  </div>
+                  <div style={{ display: 'flex', gap: 8 }}>
+                    <button onClick={() => adjustStock(p.id, -1)} style={smallBtn}>-1</button>
+                    <button onClick={() => adjustStock(p.id, 1)} style={smallBtn}>+1</button>
+                    <button onClick={() => adjustStock(p.id, 10)} style={{ ...smallBtn, background: GREEN, color: '#fff' }}>+10</button>
+                  </div>
+                </div>
+              </Card>
+            ))}
+          </div>
+        )}
+
+        {tab === 'despesas' && (
+          <div>
+            <button onClick={() => setModal('despesa')} style={{ ...bigButton(GREEN), marginBottom: 14 }}>+ Nova despesa</button>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+              {expenses.map((e) => (
+                <Card key={e.id} style={{ display: 'flex', justifyContent: 'space-between' }}>
+                  <span>{e.category}</span><span style={{ fontWeight: 700, color: '#c0392b' }}>-{fmt(e.value)}</span>
+                </Card>
+              ))}
+              {expenses.length === 0 && <div style={{ fontSize: 13, color: '#8a8a86' }}>Nenhuma despesa registrada</div>}
+            </div>
+          </div>
+        )}
+
+        {tab === 'balanco' && (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+            <Card>
+              <div style={{ fontSize: 13, color: '#8a8a86', marginBottom: 8 }}>Período do balanço</div>
+              <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+                {Object.entries(PERIOD_LABELS).map(([key, label]) => (
+                  <button key={key} onClick={() => setBalancoPeriodo(key)} style={{ padding: '6px 12px', borderRadius: 20, border: `1px solid ${balancoPeriodo === key ? ORANGE : GRAYLIGHT}`, background: balancoPeriodo === key ? ORANGE : '#fff', color: balancoPeriodo === key ? '#fff' : DARK, fontSize: 12, fontWeight: 600, cursor: 'pointer' }}>{label}</button>
+                ))}
+              </div>
+            </Card>
+            <Card style={{ textAlign: 'center' }}>
+              <div style={{ fontSize: 13, color: '#8a8a86' }}>Faturamento no período</div>
+              <div style={{ fontSize: 28, fontWeight: 800, color: DARK }}>{fmt(balancoTotal)}</div>
+              <div style={{ fontSize: 12, color: '#8a8a86', marginTop: 2 }}>{balancoSales.length} venda(s) consideradas</div>
+            </Card>
+            <Card>
+              <div style={{ fontSize: 13, fontWeight: 700, color: DARK, marginBottom: 10 }}>Como dividir esse dinheiro</div>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+                <AllocRow label="Lucro / reserva (intocável)" color={GREEN} pct={alloc.profit} onChange={(v) => updateAlloc('profit', v)} value={(balancoTotal * alloc.profit) / 100} />
+                <AllocRow label="Salário / custo com pessoal" color={ORANGE} pct={alloc.salary} onChange={(v) => updateAlloc('salary', v)} value={(balancoTotal * alloc.salary) / 100} />
+                <AllocRow label="Recompra de mercadoria" color={DARK} pct={alloc.restock} onChange={(v) => updateAlloc('restock', v)} value={(balancoTotal * alloc.restock) / 100} />
+              </div>
+              <div style={{ marginTop: 12, fontSize: 12, color: allocSum === 100 ? '#8a8a86' : '#c0392b', fontWeight: allocSum === 100 ? 400 : 700 }}>Total definido: {allocSum}% {allocSum !== 100 && '— ajuste para somar 100%'}</div>
+            </Card>
+            <div style={{ fontSize: 12, color: '#8a8a86', padding: '0 4px' }}>Essa divisão é uma orientação, não uma regra fixa — ajuste as porcentagens do jeito que fizer sentido pro seu negócio.</div>
+          </div>
+        )}
+
+        {tab === 'caixa' && (
+          <div>
+            <Card style={{ marginBottom: 14, textAlign: 'center' }}>
+              <div style={{ fontSize: 13, color: '#8a8a86' }}>Saldo atual</div>
+              <div style={{ fontSize: 30, fontWeight: 800, color: GREEN }}>{fmt(cashBalance)}</div>
+            </Card>
+            <button onClick={() => { const v = parseFloat(prompt('Valor da retirada (R$):') || '0'); if (v > 0) addManualCash({ type: 'saida', value: v, desc: 'Retirada' }); }} style={{ ...bigButton(DARK), marginBottom: 14 }}>Registrar retirada</button>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+              {[...sales.map((s) => ({ id: s.id, label: `Venda: ${s.productName}`, value: s.value, sign: 1 })),
+                ...expenses.map((e) => ({ id: e.id, label: `Despesa: ${e.category}`, value: e.value, sign: -1 })),
+                ...manualCash.map((m) => ({ id: m.id, label: m.desc || 'Movimentação', value: m.value, sign: m.type === 'entrada' ? 1 : -1 }))
+              ].map((item) => (
+                <div key={item.id} style={{ display: 'flex', justifyContent: 'space-between', fontSize: 14, padding: '6px 4px' }}>
+                  <span>{item.label}</span><span style={{ color: item.sign > 0 ? GREEN : '#c0392b', fontWeight: 600 }}>{item.sign > 0 ? '+' : '-'}{fmt(item.value)}</span>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+      </div>
+
+      <div style={{ position: 'sticky', bottom: 0, background: '#fff', borderTop: `1px solid ${GRAYLIGHT}`, display: 'flex', padding: '6px 4px' }}>
+        <Tab emoji="🏠" label="Início" active={tab === 'inicio'} onClick={() => setTab('inicio')} />
+        <Tab emoji="📦" label="Produtos" active={tab === 'produtos'} onClick={() => setTab('produtos')} />
+        <Tab emoji="📊" label="Estoque" active={tab === 'estoque'} onClick={() => setTab('estoque')} />
+        <Tab emoji="🧾" label="Despesas" active={tab === 'despesas'} onClick={() => setTab('despesas')} />
+        <Tab emoji="💰" label="Caixa" active={tab === 'caixa'} onClick={() => setTab('caixa')} />
+        <Tab emoji="🥧" label="Balanço" active={tab === 'balanco'} onClick={() => setTab('balanco')} />
+      </div>
+
+      {modal === 'boasvindas' && <WelcomeModal onConfirm={(name) => { persist({ ...data, userName: name }); setModal(null); }} />}
+      {modal === 'venda' && <VendaModal products={products} onClose={() => setModal(null)} onConfirm={(v) => { registerSale(v); setModal(null); }} />}
+      {modal === 'produto' && <ProdutoModal onClose={() => setModal(null)} onConfirm={(p) => { addProduct(p); setModal(null); }} />}
+      {modal === 'despesa' && <DespesaModal onClose={() => setModal(null)} onConfirm={(e) => { addExpense(e); setModal(null); }} />}
+    </div>
+  );
+}
+
+ReactDOM.createRoot(document.getElementById('root')).render(<App />);
+</script>
+</body>
+</html>
