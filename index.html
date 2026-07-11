@@ -1,4 +1,4 @@
-      <!DOCTYPE html>
+<!DOCTYPE html>
 <html lang="pt-BR">
 <head>
 <meta charset="UTF-8" />
@@ -26,7 +26,14 @@ const GRAYLIGHT = '#E5E7E2';
 const DARK = '#333333';
 
 const STORAGE_KEY = 'organiza-mais-data-v1';
+const ASSISTANT_NAME = 'Zé das Contas';
+const ASSISTANT_SHORT = 'Zé';
+const normalize = (s) => s.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
 const todayStr = () => new Date().toISOString().split('T')[0];
+const todayFull = () => {
+  const s = new Date().toLocaleDateString('pt-BR', { weekday: 'long', day: 'numeric', month: 'long' });
+  return s.charAt(0).toUpperCase() + s.slice(1);
+};
 const fmt = (n) => (n || 0).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
 const uid = () => Math.random().toString(36).slice(2, 10);
 
@@ -79,21 +86,34 @@ const smallBtn = {
   cursor: 'pointer', fontWeight: 700, fontSize: 13, color: DARK,
 };
 
-function Tab({ emoji, label, active, onClick }) {
+function ZeAvatar({ size = 24 }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 64 64" style={{ flexShrink: 0 }}>
+      <circle cx="32" cy="32" r="30" fill={ORANGE} />
+      <circle cx="23" cy="30" r="3.5" fill={OFFWHITE} />
+      <circle cx="41" cy="30" r="3.5" fill={OFFWHITE} />
+      <path d="M21 40 Q32 49 43 40" stroke={OFFWHITE} strokeWidth="3.5" fill="none" strokeLinecap="round" />
+      <path d="M32 4 Q40 8 38 16 Q30 14 32 4Z" fill={GREEN} />
+    </svg>
+  );
+}
+
+function Tab({ emoji, avatar, label, active, onClick }) {
   return (
     <button onClick={onClick} style={{
-      display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 4,
+      display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 3,
       flex: 1, padding: '8px 0', background: 'none', border: 'none', cursor: 'pointer',
       color: active ? ORANGE : '#8a8a86',
     }}>
-      <span style={{ fontSize: 18 }}>{emoji}</span>
+      {avatar ? <ZeAvatar size={18} /> : <span style={{ fontSize: 18 }}>{emoji}</span>}
       <span style={{ fontSize: 10, fontWeight: active ? 600 : 400 }}>{label}</span>
+      <span style={{ width: 4, height: 4, borderRadius: '50%', background: active ? ORANGE : 'transparent' }} />
     </button>
   );
 }
 
-function Card({ children, style }) {
-  return <div style={{ background: '#fff', borderRadius: 14, padding: 16, boxShadow: '0 1px 3px rgba(0,0,0,0.06)', ...style }}>{children}</div>;
+function Card({ children, style, onClick }) {
+  return <div onClick={onClick} style={{ background: '#fff', borderRadius: 14, padding: 16, boxShadow: '0 1px 3px rgba(0,0,0,0.06)', ...style }}>{children}</div>;
 }
 
 function Modal({ title, onClose, children }) {
@@ -240,6 +260,10 @@ function App() {
   const [modal, setModal] = useState(null);
   const [editingProduct, setEditingProduct] = useState(null);
   const [balancoPeriodo, setBalancoPeriodo] = useState('mes');
+  const [chatMessages, setChatMessages] = useState([
+    { role: 'assistant', text: `Oi! Eu sou o ${ASSISTANT_NAME}, seu ajudante aqui no Organiza+. Pode me contar uma venda (ex: "vendi 2 ovos por 20") ou perguntar sobre lucro, caixa, estoque ou gastos.` },
+  ]);
+  const [chatInput, setChatInput] = useState('');
 
   useEffect(() => {
     (async () => {
@@ -308,11 +332,51 @@ function App() {
     }
   };
 
+  const respondLocally = (rawText) => {
+    const n = normalize(rawText);
+
+    // tenta identificar uma venda: precisa de um produto reconhecido + uma quantidade
+    const qtyMatch = n.match(/(\d+)/);
+    const matchedProduct = products.find((p) => {
+      const words = normalize(p.name).split(' ').filter((w) => w.length > 2);
+      return words.some((w) => n.includes(w));
+    });
+
+    if (matchedProduct && qtyMatch) {
+      const qty = parseInt(qtyMatch[1], 10);
+      const valueMatch = n.match(/(?:por|r\$)\s*([\d.,]+)/);
+      const value = valueMatch ? parseFloat(valueMatch[1].replace(',', '.')) : matchedProduct.sellPrice * qty;
+      if (qty <= 0) return 'Não entendi a quantidade, pode repetir?';
+      if (qty > matchedProduct.qty) return `Você só tem ${matchedProduct.qty} de ${matchedProduct.name} em estoque — não consigo registrar ${qty}.`;
+      registerSale({ productId: matchedProduct.id, qty, value, payment: 'Não informado' });
+      return `Prontinho! Registrei ${qty}x ${matchedProduct.name} por ${fmt(value)}.`;
+    }
+
+    if (/lucr/.test(n)) return `Você lucrou ${fmt(profitToday)} hoje, com ${todaySales.length} venda(s).`;
+    if (/fatur|quanto vendi/.test(n)) return `Seu faturamento de hoje foi ${fmt(revenueToday)}.`;
+    if (/caixa|saldo/.test(n)) return `Você tem ${fmt(cashBalance)} em caixa agora.`;
+    if (/estoque|acabando|repor/.test(n)) {
+      return lowStock.length ? `Estão acabando: ${lowStock.map((p) => p.name).join(', ')}.` : 'Nenhum produto está com estoque baixo agora — tudo certo!';
+    }
+    if (/gastei|despesa/.test(n)) return `Você gastou ${fmt(todayExpenses)} hoje em despesas.`;
+    if (/oi|ola|ajuda/.test(n)) return `Oi! Pode me contar uma venda (ex: "vendi 2 ovos por 20") ou perguntar sobre lucro, caixa, estoque ou gastos.`;
+
+    return 'Não entendi bem. Tenta perguntar sobre lucro, caixa, estoque ou gastos, ou me contar uma venda (ex: "vendi 2 ovos por 20").';
+  };
+
+  const handleChatSend = () => {
+    const text = chatInput.trim();
+    if (!text) return;
+    setChatInput('');
+    setChatMessages((m) => [...m, { role: 'user', text }, { role: 'assistant', text: respondLocally(text) }]);
+  };
+
   return (
     <div style={{ fontFamily: '"Nunito Sans", system-ui, sans-serif', background: OFFWHITE, minHeight: '100vh', maxWidth: 480, margin: '0 auto' }}>
       <div style={{ background: ORANGE, padding: '18px 20px', color: '#fff', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
         <div>
           <div style={{ fontSize: 13, opacity: 0.9 }}>{data.userName ? `Olá, ${data.userName}! 👋` : 'Olá! 👋'}</div>
+          <div style={{ fontSize: 11, opacity: 0.75, marginTop: 1 }}>{todayFull()}</div>
           <div style={{ fontSize: 20, fontWeight: 700 }}>Organiza+</div>
         </div>
         <button onClick={() => setModal('config')} style={{ background: 'rgba(255,255,255,0.2)', border: 'none', borderRadius: 10, width: 36, height: 36, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', color: '#fff', fontSize: 18 }}>⚙️</button>
@@ -323,10 +387,19 @@ function App() {
           <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
             <Card>
               <div style={{ fontSize: 13, color: '#8a8a86', marginBottom: 8 }}>Resumo de hoje</div>
-              <div style={{ display: 'flex', gap: 16 }}>
-                <div><div style={{ fontSize: 12, color: '#8a8a86' }}>Faturamento</div><div style={{ fontSize: 20, fontWeight: 700, color: GREEN }}>{fmt(revenueToday)}</div></div>
-                <div><div style={{ fontSize: 12, color: '#8a8a86' }}>Lucro</div><div style={{ fontSize: 20, fontWeight: 700, color: GREEN }}>{fmt(profitToday)}</div></div>
-                <div><div style={{ fontSize: 12, color: '#8a8a86' }}>Vendas</div><div style={{ fontSize: 20, fontWeight: 700, color: DARK }}>{todaySales.length}</div></div>
+              <div style={{ display: 'flex', gap: 10 }}>
+                <div style={{ flex: 1, background: '#EAF3DE', borderRadius: 10, padding: '10px 12px' }}>
+                  <div style={{ fontSize: 12, color: '#3B6D11' }}>Faturamento</div>
+                  <div style={{ fontSize: 18, fontWeight: 700, color: GREEN }}>{fmt(revenueToday)}</div>
+                </div>
+                <div style={{ flex: 1, background: '#EAF3DE', borderRadius: 10, padding: '10px 12px' }}>
+                  <div style={{ fontSize: 12, color: '#3B6D11' }}>Lucro</div>
+                  <div style={{ fontSize: 18, fontWeight: 700, color: GREEN }}>{fmt(profitToday)}</div>
+                </div>
+                <div style={{ flex: 1, background: '#FFF4E5', borderRadius: 10, padding: '10px 12px' }}>
+                  <div style={{ fontSize: 12, color: '#B45309' }}>Vendas</div>
+                  <div style={{ fontSize: 18, fontWeight: 700, color: DARK }}>{todaySales.length}</div>
+                </div>
               </div>
             </Card>
             <Card>
@@ -335,15 +408,19 @@ function App() {
               <div style={{ fontSize: 12, color: '#8a8a86', marginTop: 2 }}>Gastos hoje: {fmt(todayExpenses)}</div>
             </Card>
             {lowStock.length > 0 && (
-              <Card style={{ background: '#FFF4E5', border: `1px solid ${ORANGE}` }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 8, color: ORANGE, fontWeight: 700, fontSize: 14 }}>⚠️ Estoque baixo</div>
+              <Card onClick={() => setTab('estoque')} style={{ background: '#FFF4E5', border: `1px solid ${ORANGE}`, cursor: 'pointer' }}>
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 8, color: ORANGE, fontWeight: 700, fontSize: 14 }}>⚠️ Estoque baixo</div>
+                  <span style={{ color: ORANGE, fontSize: 16 }}>›</span>
+                </div>
                 <div style={{ fontSize: 13, color: DARK, marginTop: 6 }}>{lowStock.map((p) => p.name).join(', ')} — {lowStock.length} produto(s) precisam de reposição</div>
               </Card>
             )}
             <button onClick={() => setModal('venda')} style={bigButton(ORANGE)}>+ Registrar venda</button>
             <Card>
-              <div style={{ fontSize: 13, color: '#8a8a86', marginBottom: 8 }}>Últimas vendas</div>
-              {sales.slice(0, 5).map((s) => (
+              <div style={{ fontSize: 13, color: '#8a8a86', marginBottom: 8 }}>Todas as vendas ({sales.length})</div>
+              <div style={{ maxHeight: 280, overflowY: 'auto' }}>
+              {sales.map((s) => (
                 <div key={s.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '6px 0', fontSize: 14, borderBottom: `1px solid ${GRAYLIGHT}` }}>
                   <span>{s.productName} × {s.qty}</span>
                   <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
@@ -353,6 +430,7 @@ function App() {
                 </div>
               ))}
               {sales.length === 0 && <div style={{ fontSize: 13, color: '#8a8a86' }}>Nenhuma venda ainda</div>}
+              </div>
             </Card>
           </div>
         )}
@@ -443,6 +521,26 @@ function App() {
           </div>
         )}
 
+        {tab === 'assistente' && (
+          <div style={{ display: 'flex', flexDirection: 'column', height: 420 }}>
+            <div style={{ flex: 1, overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: 8, marginBottom: 10 }}>
+              {chatMessages.map((m, i) => (
+                <div key={i} style={{ display: 'flex', flexDirection: m.role === 'user' ? 'row-reverse' : 'row', alignItems: 'flex-end', gap: 6, alignSelf: m.role === 'user' ? 'flex-end' : 'flex-start', maxWidth: '85%' }}>
+                  {m.role === 'assistant' && <ZeAvatar size={22} />}
+                  <div>
+                    {m.role === 'assistant' && <div style={{ fontSize: 11, color: '#8a8a86', marginBottom: 2, marginLeft: 4, fontWeight: 600 }}>{ASSISTANT_NAME}</div>}
+                    <div style={{ background: m.role === 'user' ? ORANGE : '#fff', color: m.role === 'user' ? '#fff' : DARK, padding: '10px 14px', borderRadius: 14, fontSize: 14, boxShadow: m.role === 'user' ? 'none' : '0 1px 3px rgba(0,0,0,0.06)' }}>{m.text}</div>
+                  </div>
+                </div>
+              ))}
+            </div>
+            <div style={{ display: 'flex', gap: 8 }}>
+              <input style={{ ...inputStyle, flex: 1 }} placeholder='Ex: "vendi 2 ovos por 20"' value={chatInput} onChange={(e) => setChatInput(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter') handleChatSend(); }} />
+              <button onClick={handleChatSend} style={{ background: ORANGE, border: 'none', borderRadius: 10, width: 44, color: '#fff', cursor: 'pointer', fontSize: 16 }}>➤</button>
+            </div>
+          </div>
+        )}
+
         {tab === 'caixa' && (
           <div>
             <Card style={{ marginBottom: 14, textAlign: 'center' }}>
@@ -470,6 +568,7 @@ function App() {
         <Tab emoji="📊" label="Estoque" active={tab === 'estoque'} onClick={() => setTab('estoque')} />
         <Tab emoji="🧾" label="Despesas" active={tab === 'despesas'} onClick={() => setTab('despesas')} />
         <Tab emoji="💰" label="Caixa" active={tab === 'caixa'} onClick={() => setTab('caixa')} />
+        <Tab avatar label={ASSISTANT_SHORT} active={tab === 'assistente'} onClick={() => setTab('assistente')} />
         <Tab emoji="🥧" label="Balanço" active={tab === 'balanco'} onClick={() => setTab('balanco')} />
       </div>
 
@@ -498,6 +597,4 @@ function App() {
 ReactDOM.createRoot(document.getElementById('root')).render(<App />);
 </script>
 </body>
-</html>  
-
-      
+</html>
