@@ -1,35 +1,5 @@
-<!DOCTYPE html>
-<html lang="pt-BR">
-<head>
-<meta charset="UTF-8" />
-<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
-<title>Organiza+</title>
-<meta name="theme-color" content="#FF8A00" />
-<style>
-  body { margin: 0; background: #F8F9F7; font-family: 'Nunito Sans', system-ui, -apple-system, sans-serif; }
-  * { box-sizing: border-box; }
-  input, select { font-family: inherit; }
-  .app-shell { max-width: 480px; margin: 0 auto; background: #F8F9F7; min-height: 100vh; }
-  @media (min-width: 700px) {
-    body { background: #E5E7E2; }
-    .app-shell {
-      max-width: 720px;
-      margin: 24px auto;
-      min-height: calc(100vh - 48px);
-      border-radius: 20px;
-      overflow: hidden;
-      box-shadow: 0 4px 24px rgba(0,0,0,0.10);
-    }
-  }
-</style>
-<script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
-<script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
-<script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
-</head>
-<body>
-<div id="root"></div>
-<script type="text/babel">
-const { useState, useEffect, useCallback } = React;
+import React, { useState, useEffect, useCallback } from 'react';
+import { Home, ShoppingCart, Package, Boxes, Receipt, Wallet, Plus, X, AlertTriangle, Trash2, PieChart, MessageCircle, Send, Settings, Pencil, Menu as MenuIcon, ChevronRight, ArrowLeft, ShoppingBag } from 'lucide-react';
 
 const ORANGE = '#FF8A00';
 const GREEN = '#1D5E3A';
@@ -40,25 +10,20 @@ const DARK = '#333333';
 const STORAGE_KEY = 'organiza-mais-data-v1';
 const ASSISTANT_NAME = 'Zé das Contas';
 const ASSISTANT_SHORT = 'Zé';
-const normalize = (s) => s.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
 const todayStr = () => new Date().toISOString().split('T')[0];
 const todayFull = () => {
   const s = new Date().toLocaleDateString('pt-BR', { weekday: 'long', day: 'numeric', month: 'long' });
   return s.charAt(0).toUpperCase() + s.slice(1);
 };
+const greetingWord = () => {
+  const h = new Date().getHours();
+  if (h < 12) return 'Bom dia';
+  if (h < 18) return 'Boa tarde';
+  return 'Boa noite';
+};
+const SUB_SCREENS = ['produtos', 'estoque', 'despesas', 'balanco'];
 const fmt = (n) => (n || 0).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
 const uid = () => Math.random().toString(36).slice(2, 10);
-
-const storage = {
-  async get(key) {
-    const v = localStorage.getItem(key);
-    return v !== null ? { key, value: v } : null;
-  },
-  async set(key, value) {
-    localStorage.setItem(key, value);
-    return { key, value };
-  },
-};
 
 const seed = {
   products: [
@@ -85,19 +50,6 @@ function withinPeriod(dateStr, period) {
   return true;
 }
 
-const inputStyle = {
-  width: '100%', padding: '10px 12px', borderRadius: 10, border: `1px solid ${GRAYLIGHT}`,
-  fontSize: 15, boxSizing: 'border-box', background: '#fff', color: DARK,
-};
-const bigButton = (bg) => ({
-  width: '100%', padding: '14px', borderRadius: 12, border: 'none', background: bg,
-  color: '#fff', fontSize: 16, fontWeight: 700, cursor: 'pointer',
-});
-const smallBtn = {
-  padding: '6px 10px', borderRadius: 8, border: `1px solid ${GRAYLIGHT}`, background: '#fff',
-  cursor: 'pointer', fontWeight: 700, fontSize: 13, color: DARK,
-};
-
 function ZeAvatar({ size = 24 }) {
   return (
     <svg width={size} height={size} viewBox="0 0 64 64" style={{ flexShrink: 0 }}>
@@ -110,31 +62,49 @@ function ZeAvatar({ size = 24 }) {
   );
 }
 
-function Tab({ emoji, avatar, label, active, onClick }) {
+function Tab({ icon: Icon, avatar, label, active, onClick }) {
   return (
-    <button onClick={onClick} style={{
-      display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 3,
-      flex: 1, padding: '8px 0', background: 'none', border: 'none', cursor: 'pointer',
-      color: active ? ORANGE : '#8a8a86',
-    }}>
-      {avatar ? <ZeAvatar size={18} /> : <span style={{ fontSize: 18 }}>{emoji}</span>}
-      <span style={{ fontSize: 10, fontWeight: active ? 600 : 400 }}>{label}</span>
+    <button
+      onClick={onClick}
+      style={{
+        display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 3,
+        flex: 1, padding: '8px 0', background: 'none', border: 'none', cursor: 'pointer',
+        color: active ? ORANGE : '#8a8a86',
+      }}
+    >
+      {avatar ? <ZeAvatar size={20} /> : <Icon size={20} strokeWidth={2} />}
+      <span style={{ fontSize: 11, fontWeight: active ? 600 : 400 }}>{label}</span>
       <span style={{ width: 4, height: 4, borderRadius: '50%', background: active ? ORANGE : 'transparent' }} />
     </button>
   );
 }
 
 function Card({ children, style, onClick }) {
-  return <div onClick={onClick} style={{ background: '#fff', borderRadius: 14, padding: 16, boxShadow: '0 1px 3px rgba(0,0,0,0.06)', ...style }}>{children}</div>;
+  return (
+    <div onClick={onClick} style={{ background: '#fff', borderRadius: 14, padding: 16, boxShadow: '0 1px 3px rgba(0,0,0,0.06)', ...style }}>
+      {children}
+    </div>
+  );
 }
 
 function Modal({ title, onClose, children }) {
   return (
-    <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.4)', display: 'flex', alignItems: 'flex-end', justifyContent: 'center', zIndex: 50 }} onClick={onClose}>
-      <div onClick={(e) => e.stopPropagation()} style={{ background: OFFWHITE, width: '100%', maxWidth: 480, borderRadius: '20px 20px 0 0', padding: 20, maxHeight: '85vh', overflowY: 'auto' }}>
+    <div style={{
+      position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.4)', display: 'flex',
+      alignItems: 'flex-end', justifyContent: 'center', zIndex: 50,
+    }} onClick={onClose}>
+      <div
+        onClick={(e) => e.stopPropagation()}
+        style={{
+          background: OFFWHITE, width: '100%', maxWidth: 480, borderRadius: '20px 20px 0 0',
+          padding: 20, maxHeight: '85vh', overflowY: 'auto',
+        }}
+      >
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
           <h2 style={{ margin: 0, fontSize: 18, fontWeight: 700, color: DARK }}>{title}</h2>
-          <button onClick={onClose} style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: 20, color: '#8a8a86' }}>✕</button>
+          <button onClick={onClose} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#8a8a86' }}>
+            <X size={22} />
+          </button>
         </div>
         {children}
       </div>
@@ -151,136 +121,35 @@ function Field({ label, children }) {
   );
 }
 
-function WelcomeModal({ onConfirm }) {
-  const [name, setName] = useState('');
-  return (
-    <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.4)', display: 'flex', alignItems: 'flex-end', justifyContent: 'center', zIndex: 50 }}>
-      <div style={{ background: OFFWHITE, width: '100%', maxWidth: 480, borderRadius: '20px 20px 0 0', padding: 24 }}>
-        <div style={{ fontSize: 20, fontWeight: 700, color: DARK, marginBottom: 6 }}>Bem-vindo(a) ao Organiza+</div>
-        <div style={{ fontSize: 14, color: '#8a8a86', marginBottom: 16 }}>Como você gostaria de ser chamado(a)?</div>
-        <input autoFocus style={inputStyle} placeholder="Seu nome" value={name}
-          onChange={(e) => setName(e.target.value)}
-          onKeyDown={(e) => { if (e.key === 'Enter' && name.trim()) onConfirm(name.trim()); }} />
-        <button style={{ ...bigButton(ORANGE), marginTop: 16 }} disabled={!name.trim()} onClick={() => onConfirm(name.trim())}>Começar</button>
-      </div>
-    </div>
-  );
-}
+const inputStyle = {
+  width: '100%', padding: '10px 12px', borderRadius: 10, border: `1px solid ${GRAYLIGHT}`,
+  fontSize: 15, boxSizing: 'border-box', background: '#fff', color: DARK,
+};
 
-function VendaModal({ products, onClose, onConfirm }) {
-  const [productId, setProductId] = useState(products[0]?.id || '');
-  const [qty, setQty] = useState(1);
-  const [payment, setPayment] = useState('Dinheiro');
-  const p = products.find((x) => x.id === productId);
-  const value = p ? p.sellPrice * qty : 0;
-  return (
-    <Modal title="Registrar venda" onClose={onClose}>
-      <Field label="Produto">
-        <select style={inputStyle} value={productId} onChange={(e) => setProductId(e.target.value)}>
-          {products.map((p) => <option key={p.id} value={p.id}>{p.name} (estoque: {p.qty})</option>)}
-        </select>
-      </Field>
-      <Field label="Quantidade"><input type="number" min="1" style={inputStyle} value={qty} onChange={(e) => setQty(parseInt(e.target.value) || 1)} /></Field>
-      <Field label="Forma de pagamento">
-        <select style={inputStyle} value={payment} onChange={(e) => setPayment(e.target.value)}>
-          <option>Dinheiro</option><option>Cartão</option><option>Pix</option>
-        </select>
-      </Field>
-      <div style={{ fontSize: 14, color: DARK, marginBottom: 14 }}>Total: <strong>{fmt(value)}</strong></div>
-      <button style={bigButton(ORANGE)} disabled={!p || qty < 1 || qty > (p?.qty || 0)} onClick={() => onConfirm({ productId, qty, value, payment })}>Confirmar venda</button>
-      {p && qty > p.qty && <div style={{ color: '#c0392b', fontSize: 13, marginTop: 8 }}>Quantidade maior que o estoque disponível</div>}
-    </Modal>
-  );
-}
+const bigButton = (bg) => ({
+  width: '100%', padding: '14px', borderRadius: 12, border: 'none', background: bg,
+  color: '#fff', fontSize: 16, fontWeight: 700, cursor: 'pointer',
+});
 
-function ProdutoModal({ product, onClose, onConfirm }) {
-  const [name, setName] = useState(product?.name || '');
-  const [category, setCategory] = useState(product?.category || '');
-  const [buyPrice, setBuyPrice] = useState(product ? String(product.buyPrice) : '');
-  const [sellPrice, setSellPrice] = useState(product ? String(product.sellPrice) : '');
-  const [qty, setQty] = useState(product ? String(product.qty) : '');
-  const [minQty, setMinQty] = useState(product ? String(product.minQty) : '5');
-  const valid = name && buyPrice !== '' && sellPrice !== '' && qty !== '';
-  return (
-    <Modal title={product ? 'Editar produto' : 'Novo produto'} onClose={onClose}>
-      <Field label="Nome do produto"><input style={inputStyle} value={name} onChange={(e) => setName(e.target.value)} /></Field>
-      <Field label="Categoria (opcional)"><input style={inputStyle} value={category} onChange={(e) => setCategory(e.target.value)} /></Field>
-      <Field label="Preço de compra (R$)"><input type="number" style={inputStyle} value={buyPrice} onChange={(e) => setBuyPrice(e.target.value)} /></Field>
-      <Field label="Preço de venda (R$)"><input type="number" style={inputStyle} value={sellPrice} onChange={(e) => setSellPrice(e.target.value)} /></Field>
-      <Field label="Quantidade em estoque"><input type="number" style={inputStyle} value={qty} onChange={(e) => setQty(e.target.value)} /></Field>
-      <Field label="Estoque mínimo"><input type="number" style={inputStyle} value={minQty} onChange={(e) => setMinQty(e.target.value)} /></Field>
-      {buyPrice !== '' && sellPrice !== '' && (
-        <div style={{ fontSize: 13, color: GREEN, marginBottom: 14 }}>Você lucra {fmt(parseFloat(sellPrice || 0) - parseFloat(buyPrice || 0))} em cada unidade vendida</div>
-      )}
-      <button style={bigButton(GREEN)} disabled={!valid} onClick={() => onConfirm({ name, category: category || 'Geral', buyPrice: parseFloat(buyPrice), sellPrice: parseFloat(sellPrice), qty: parseInt(qty), minQty: parseInt(minQty) || 5 })}>
-        {product ? 'Salvar alterações' : 'Salvar produto'}
-      </button>
-    </Modal>
-  );
-}
-
-function DespesaModal({ onClose, onConfirm }) {
-  const [category, setCategory] = useState('Aluguel');
-  const [value, setValue] = useState('');
-  return (
-    <Modal title="Nova despesa" onClose={onClose}>
-      <Field label="Categoria">
-        <select style={inputStyle} value={category} onChange={(e) => setCategory(e.target.value)}>
-          <option>Aluguel</option><option>Energia</option><option>Água</option><option>Funcionários</option><option>Transporte</option><option>Compras</option><option>Outras</option>
-        </select>
-      </Field>
-      <Field label="Valor (R$)"><input type="number" style={inputStyle} value={value} onChange={(e) => setValue(e.target.value)} /></Field>
-      <button style={bigButton(GREEN)} disabled={!value || parseFloat(value) <= 0} onClick={() => onConfirm({ category, value: parseFloat(value) })}>Salvar despesa</button>
-    </Modal>
-  );
-}
-
-function ConfigModal({ userName, onClose, onSaveName, onReset }) {
-  const [name, setName] = useState(userName || '');
-  return (
-    <Modal title="Configurações" onClose={onClose}>
-      <Field label="Seu nome"><input style={inputStyle} value={name} onChange={(e) => setName(e.target.value)} /></Field>
-      <button style={{ ...bigButton(GREEN), marginBottom: 24 }} disabled={!name.trim()} onClick={() => onSaveName(name.trim())}>Salvar nome</button>
-      <div style={{ borderTop: `1px solid ${GRAYLIGHT}`, paddingTop: 20 }}>
-        <div style={{ fontSize: 13, fontWeight: 700, color: '#c0392b', marginBottom: 6 }}>Zona de risco</div>
-        <div style={{ fontSize: 13, color: '#8a8a86', marginBottom: 12 }}>Isso apaga produtos, vendas, despesas e o caixa — tudo volta ao zero, como se o app fosse instalado agora.</div>
-        <button style={bigButton('#c0392b')} onClick={onReset}>Zerar todos os dados</button>
-      </div>
-    </Modal>
-  );
-}
-
-function AllocRow({ label, color, pct, value, onChange }) {
-  return (
-    <div>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 4 }}>
-        <span style={{ fontSize: 13, color: DARK }}>{label}</span>
-        <span style={{ fontSize: 14, fontWeight: 700, color }}>{fmt(value)}</span>
-      </div>
-      <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-        <input type="range" min="0" max="100" value={pct} onChange={(e) => onChange(parseInt(e.target.value))} style={{ flex: 1, accentColor: color }} />
-        <span style={{ fontSize: 12, color: '#8a8a86', width: 34, textAlign: 'right' }}>{pct}%</span>
-      </div>
-    </div>
-  );
-}
-
-function App() {
+export default function App() {
   const [data, setData] = useState(seed);
   const [loaded, setLoaded] = useState(false);
   const [tab, setTab] = useState('inicio');
-  const [modal, setModal] = useState(null);
+  const [modal, setModal] = useState(null); // 'venda' | 'compra' | 'produto' | 'despesa' | 'config'
   const [editingProduct, setEditingProduct] = useState(null);
   const [balancoPeriodo, setBalancoPeriodo] = useState('mes');
   const [chatMessages, setChatMessages] = useState([
-    { role: 'assistant', text: `Oi! Eu sou o ${ASSISTANT_NAME}, seu ajudante aqui no Organiza+. Pode me contar uma venda (ex: "vendi 2 ovos por 20") ou perguntar sobre lucro, caixa, estoque ou gastos.` },
+    { role: 'assistant', text: `Oi! Eu sou o ${ASSISTANT_NAME}, seu ajudante aqui no Organiza+. Você pode digitar ou apertar o microfone 🎤 e falar comigo — tipo "vendi 2 ovos por 20" ou "quanto lucrei hoje?".` },
   ]);
   const [chatInput, setChatInput] = useState('');
+  const [isListening, setIsListening] = useState(false);
+  const [audioOn, setAudioOn] = useState(true);
+  const [chatLoading, setChatLoading] = useState(false);
 
   useEffect(() => {
     (async () => {
       try {
-        const res = await storage.get(STORAGE_KEY);
+        const res = await window.storage.get(STORAGE_KEY, false);
         if (res && res.value) {
           const parsed = JSON.parse(res.value);
           setData(parsed);
@@ -297,10 +166,12 @@ function App() {
 
   const persist = useCallback((next) => {
     setData(next);
-    storage.set(STORAGE_KEY, JSON.stringify(next)).catch(() => {});
+    window.storage.set(STORAGE_KEY, JSON.stringify(next), false).catch(() => {});
   }, []);
 
-  if (!loaded) return <div style={{ padding: 40, textAlign: 'center', color: '#8a8a86' }}>Carregando…</div>;
+  if (!loaded) {
+    return <div style={{ padding: 40, textAlign: 'center', color: '#8a8a86' }}>Carregando…</div>;
+  }
 
   const { products, sales, expenses, manualCash } = data;
   const alloc = data.alloc || { profit: 10, salary: 50, restock: 40 };
@@ -311,31 +182,136 @@ function App() {
   const revenueToday = todaySales.reduce((a, s) => a + s.value, 0);
   const profitToday = todaySales.reduce((a, s) => a + s.profit, 0);
   const todayExpenses = expenses.filter((e) => e.date === todayStr()).reduce((a, e) => a + e.value, 0);
-  const cashBalance = sales.reduce((a, s) => a + s.value, 0) - expenses.reduce((a, e) => a + e.value, 0) + manualCash.reduce((a, m) => a + (m.type === 'entrada' ? m.value : -m.value), 0);
+  const cashBalance =
+    sales.reduce((a, s) => a + s.value, 0) -
+    expenses.reduce((a, e) => a + e.value, 0) +
+    manualCash.reduce((a, m) => a + (m.type === 'entrada' ? m.value : -m.value), 0);
   const lowStock = products.filter((p) => p.qty <= p.minQty);
 
+  // ---- ações ----
   const addProduct = (p) => persist({ ...data, products: [...products, { ...p, id: uid() }] });
-  const updateProduct = (id, changes) => persist({ ...data, products: products.map((p) => (p.id === id ? { ...p, ...changes } : p)) });
   const deleteProduct = (id) => persist({ ...data, products: products.filter((p) => p.id !== id) });
-  const adjustStock = (id, delta) => persist({ ...data, products: products.map((p) => (p.id === id ? { ...p, qty: Math.max(0, p.qty + delta) } : p)) });
+  const adjustStock = (id, delta) =>
+    persist({ ...data, products: products.map((p) => (p.id === id ? { ...p, qty: Math.max(0, p.qty + delta) } : p)) });
 
   const registerSale = ({ productId, qty, value, payment }) => {
     const p = products.find((x) => x.id === productId);
     if (!p) return;
     const profit = value - p.buyPrice * qty;
     const sale = { id: uid(), productId, productName: p.name, qty, value, payment, profit, date: todayStr() };
-    persist({ ...data, sales: [sale, ...sales], products: products.map((x) => (x.id === productId ? { ...x, qty: Math.max(0, x.qty - qty) } : x)) });
-  };
-  const deleteSale = (id) => {
-    const sale = sales.find((s) => s.id === id);
-    if (!sale) return;
-    persist({ ...data, sales: sales.filter((s) => s.id !== id), products: products.map((p) => (p.id === sale.productId ? { ...p, qty: p.qty + sale.qty } : p)) });
+    persist({
+      ...data,
+      sales: [sale, ...sales],
+      products: products.map((x) => (x.id === productId ? { ...x, qty: Math.max(0, x.qty - qty) } : x)),
+    });
   };
 
   const updateAlloc = (field, val) => persist({ ...data, alloc: { ...alloc, [field]: val } });
+
+  const speak = (text) => {
+    if (!audioOn || !window.speechSynthesis) return;
+    window.speechSynthesis.cancel();
+    const utter = new SpeechSynthesisUtterance(text);
+    utter.lang = 'pt-BR';
+    const voices = window.speechSynthesis.getVoices();
+    const ptVoice = voices.find((v) => v.lang === 'pt-BR') || voices.find((v) => v.lang && v.lang.startsWith('pt'));
+    if (ptVoice) utter.voice = ptVoice;
+    window.speechSynthesis.speak(utter);
+  };
+
+  const startListening = () => {
+    const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+    if (!SR) {
+      alert('Seu navegador não suporta voz. Tente pelo Chrome no Android, direto no link publicado.');
+      return;
+    }
+    const recognition = new SR();
+    recognition.lang = 'pt-BR';
+    recognition.continuous = false;
+    recognition.interimResults = false;
+    setIsListening(true);
+    recognition.onresult = (event) => {
+      const transcript = event.results[0][0].transcript;
+      handleChatSend(transcript);
+    };
+    recognition.onerror = () => setIsListening(false);
+    recognition.onend = () => setIsListening(false);
+    recognition.start();
+  };
+
+  const handleChatSend = async (textOverride) => {
+    const text = (textOverride !== undefined ? textOverride : chatInput).trim();
+    if (!text || chatLoading) return;
+    setChatInput('');
+    setChatMessages((m) => [...m, { role: 'user', text }]);
+    setChatLoading(true);
+
+    const productList = products.map((p) => `- id:${p.id} | ${p.name} | preço de venda: R$${p.sellPrice} | estoque: ${p.qty}`).join('\n');
+    const systemPrompt = `Você é o ${ASSISTANT_NAME} (pode se chamar de "${ASSISTANT_SHORT}"), o assistente do app Organiza+, um app de gestão para pequenos empreendedores brasileiros.
+Você é como um parceiro de confiança que cuida das contas do empreendedor. Fale sempre em português, de forma simples, direta e calorosa.
+Se fizer sentido na conversa, você pode se referir a si mesmo pelo nome (ex: "Aqui é o ${ASSISTANT_SHORT}!" ou "O ${ASSISTANT_SHORT} já registrou sua venda"), mas sem exagerar — não precisa fazer isso em toda frase.
+
+Produtos cadastrados:
+${productList || '(nenhum produto cadastrado ainda)'}
+
+Dados de hoje: faturamento R$${revenueToday.toFixed(2)}, lucro R$${profitToday.toFixed(2)}, ${todaySales.length} venda(s), saldo em caixa R$${cashBalance.toFixed(2)}.
+Produtos com estoque baixo: ${lowStock.map((p) => p.name).join(', ') || 'nenhum'}.
+
+Responda SOMENTE com um JSON válido, sem markdown, sem texto antes ou depois, em um dos formatos:
+- Venda identificada: {"tipo":"venda","produto_id":"<id exato da lista>","quantidade":N,"valor":N,"resposta":"frase curta de confirmação"}
+- Não identificou o produto ou faltou informação: {"tipo":"erro","resposta":"frase explicando o que faltou"}
+- Pergunta sobre os dados do negócio: {"tipo":"resposta","resposta":"frase respondendo com base nos dados acima"}`;
+
+    try {
+      const res = await fetch('https://api.anthropic.com/v1/messages', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          model: 'claude-sonnet-4-6',
+          max_tokens: 1000,
+          system: systemPrompt,
+          messages: [{ role: 'user', content: text }],
+        }),
+      });
+      const json = await res.json();
+      const raw = (json.content || []).map((b) => b.text || '').join('').trim();
+      const clean = raw.replace(/```json|```/g, '').trim();
+      const parsed = JSON.parse(clean);
+
+      if (parsed.tipo === 'venda') {
+        const p = products.find((x) => x.id === parsed.produto_id);
+        if (p) {
+          registerSale({ productId: p.id, qty: parsed.quantidade, value: parsed.valor, payment: 'Não informado' });
+        }
+        setChatMessages((m) => [...m, { role: 'assistant', text: parsed.resposta }]);
+        speak(parsed.resposta);
+      } else {
+        setChatMessages((m) => [...m, { role: 'assistant', text: parsed.resposta }]);
+        speak(parsed.resposta);
+      }
+    } catch (e) {
+      const fallback = 'Não consegui entender agora, pode tentar de novo?';
+      setChatMessages((m) => [...m, { role: 'assistant', text: fallback }]);
+      speak(fallback);
+    }
+    setChatLoading(false);
+  };
+
   const addExpense = (e) => persist({ ...data, expenses: [{ ...e, id: uid(), date: todayStr() }, ...expenses] });
   const deleteExpense = (id) => persist({ ...data, expenses: expenses.filter((e) => e.id !== id) });
   const addManualCash = (m) => persist({ ...data, manualCash: [{ ...m, id: uid(), date: todayStr() }, ...manualCash] });
+
+  const deleteSale = (id) => {
+    const sale = sales.find((s) => s.id === id);
+    if (!sale) return;
+    persist({
+      ...data,
+      sales: sales.filter((s) => s.id !== id),
+      products: products.map((p) => (p.id === sale.productId ? { ...p, qty: p.qty + sale.qty } : p)),
+    });
+  };
+
+  const updateProduct = (id, changes) => persist({ ...data, products: products.map((p) => (p.id === id ? { ...p, ...changes } : p)) });
 
   const resetAllData = () => {
     if (window.confirm('Isso vai apagar TODOS os dados (produtos, vendas, despesas, caixa) e não pode ser desfeito. Confirma?')) {
@@ -344,107 +320,83 @@ function App() {
     }
   };
 
-  const respondLocally = (rawText) => {
-    const n = normalize(rawText);
-
-    // tenta identificar uma venda: precisa de um produto reconhecido + uma quantidade
-    const qtyMatch = n.match(/(\d+)/);
-    const matchedProduct = products.find((p) => {
-      const words = normalize(p.name).split(' ').filter((w) => w.length > 2);
-      return words.some((w) => n.includes(w));
-    });
-
-    if (matchedProduct && qtyMatch) {
-      const qty = parseInt(qtyMatch[1], 10);
-      const valueMatch = n.match(/(?:por|r\$)\s*([\d.,]+)/);
-      const value = valueMatch ? parseFloat(valueMatch[1].replace(',', '.')) : matchedProduct.sellPrice * qty;
-      if (qty <= 0) return 'Não entendi a quantidade, pode repetir?';
-      if (qty > matchedProduct.qty) return `Você só tem ${matchedProduct.qty} de ${matchedProduct.name} em estoque — não consigo registrar ${qty}.`;
-      registerSale({ productId: matchedProduct.id, qty, value, payment: 'Não informado' });
-      return `Prontinho! Registrei ${qty}x ${matchedProduct.name} por ${fmt(value)}.`;
-    }
-
-    if (/lucr/.test(n)) return `Você lucrou ${fmt(profitToday)} hoje, com ${todaySales.length} venda(s).`;
-    if (/fatur|quanto vendi/.test(n)) return `Seu faturamento de hoje foi ${fmt(revenueToday)}.`;
-    if (/caixa|saldo/.test(n)) return `Você tem ${fmt(cashBalance)} em caixa agora.`;
-    if (/estoque|acabando|repor/.test(n)) {
-      return lowStock.length ? `Estão acabando: ${lowStock.map((p) => p.name).join(', ')}.` : 'Nenhum produto está com estoque baixo agora — tudo certo!';
-    }
-    if (/gastei|despesa/.test(n)) return `Você gastou ${fmt(todayExpenses)} hoje em despesas.`;
-    if (/oi|ola|ajuda/.test(n)) return `Oi! Pode me contar uma venda (ex: "vendi 2 ovos por 20") ou perguntar sobre lucro, caixa, estoque ou gastos.`;
-
-    return 'Não entendi bem. Tenta perguntar sobre lucro, caixa, estoque ou gastos, ou me contar uma venda (ex: "vendi 2 ovos por 20").';
-  };
-
-  const handleChatSend = () => {
-    const text = chatInput.trim();
-    if (!text) return;
-    setChatInput('');
-    setChatMessages((m) => [...m, { role: 'user', text }, { role: 'assistant', text: respondLocally(text) }]);
-  };
-
   return (
-    <div className="app-shell" style={{ fontFamily: '"Nunito Sans", system-ui, sans-serif' }}>
+    <div style={{
+      fontFamily: '"Nunito Sans", system-ui, sans-serif', background: OFFWHITE, minHeight: 500,
+      maxWidth: 480, margin: '0 auto', borderRadius: 20, overflow: 'hidden', border: `1px solid ${GRAYLIGHT}`,
+    }}>
+      {/* header */}
       <div style={{ background: ORANGE, padding: '18px 20px', color: '#fff', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
         <div>
-          <div style={{ fontSize: 13, opacity: 0.9 }}>{data.userName ? `Olá, ${data.userName}! 👋` : 'Olá! 👋'}</div>
+          <div style={{ fontSize: 13, opacity: 0.9 }}>{greetingWord()}{data.userName ? `, ${data.userName}` : ''} 👋</div>
           <div style={{ fontSize: 11, opacity: 0.75, marginTop: 1 }}>{todayFull()}</div>
           <div style={{ fontSize: 20, fontWeight: 700 }}>Organiza+</div>
         </div>
-        <button onClick={() => setModal('config')} style={{ background: 'rgba(255,255,255,0.2)', border: 'none', borderRadius: 10, width: 36, height: 36, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', color: '#fff', fontSize: 18 }}>⚙️</button>
+        <button onClick={() => setModal('config')} style={{ background: 'rgba(255,255,255,0.2)', border: 'none', borderRadius: 10, width: 36, height: 36, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', color: '#fff' }}>
+          <Settings size={18} />
+        </button>
       </div>
 
       <div style={{ padding: 16, paddingBottom: 90 }}>
         {tab === 'inicio' && (
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
             <Card>
-              <div style={{ fontSize: 13, color: '#8a8a86', marginBottom: 8 }}>Resumo de hoje</div>
-              <div style={{ display: 'flex', gap: 10 }}>
-                <div style={{ flex: 1, background: '#EAF3DE', borderRadius: 10, padding: '10px 12px' }}>
-                  <div style={{ fontSize: 12, color: '#3B6D11' }}>Faturamento</div>
-                  <div style={{ fontSize: 18, fontWeight: 700, color: GREEN }}>{fmt(revenueToday)}</div>
-                </div>
-                <div style={{ flex: 1, background: '#EAF3DE', borderRadius: 10, padding: '10px 12px' }}>
-                  <div style={{ fontSize: 12, color: '#3B6D11' }}>Lucro</div>
-                  <div style={{ fontSize: 18, fontWeight: 700, color: GREEN }}>{fmt(profitToday)}</div>
-                </div>
-                <div style={{ flex: 1, background: '#FFF4E5', borderRadius: 10, padding: '10px 12px' }}>
-                  <div style={{ fontSize: 12, color: '#B45309' }}>Vendas</div>
-                  <div style={{ fontSize: 18, fontWeight: 700, color: DARK }}>{todaySales.length}</div>
-                </div>
+              <div style={{ fontSize: 13, color: '#8a8a86', marginBottom: 4 }}>Hoje você vendeu</div>
+              <div style={{ fontSize: 30, fontWeight: 800, color: GREEN }}>{fmt(revenueToday)}</div>
+            </Card>
+
+            <Card>
+              <div style={{ fontSize: 13, color: '#8a8a86', marginBottom: 4 }}>Hoje você lucrou</div>
+              <div style={{ fontSize: 30, fontWeight: 800, color: GREEN }}>{fmt(profitToday)}</div>
+            </Card>
+
+            <Card
+              onClick={() => lowStock.length > 0 && setTab('estoque')}
+              style={{ display: 'flex', alignItems: 'center', gap: 10, cursor: lowStock.length > 0 ? 'pointer' : 'default' }}
+            >
+              <span style={{ fontSize: 18 }}>{lowStock.length > 0 ? '🔴' : '🟢'}</span>
+              <span style={{ fontSize: 14, fontWeight: 600, color: DARK, flex: 1 }}>
+                {lowStock.length > 0 ? `Comprar ${lowStock.length} produto(s)` : 'Estoque em dia'}
+              </span>
+              {lowStock.length > 0 && <ChevronRight size={18} color="#8a8a86" />}
+            </Card>
+
+            <button onClick={() => setModal('venda')} style={{ ...bigButton(ORANGE), fontSize: 18, padding: '16px' }}>
+              Vendi agora
+            </button>
+            <button
+              onClick={() => setModal('compra')}
+              style={{ ...bigButton('#fff'), color: DARK, border: `1px solid ${GRAYLIGHT}` }}
+            >
+              Comprei mercadoria
+            </button>
+
+            <Card
+              onClick={() => setTab('assistente')}
+              style={{ background: '#F3F0FF', border: 'none', cursor: 'pointer' }}
+            >
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
+                <ZeAvatar size={20} />
+                <span style={{ fontSize: 13, fontWeight: 700, color: DARK }}>Pergunte ao {ASSISTANT_SHORT}</span>
               </div>
-            </Card>
-            <Card>
-              <div style={{ fontSize: 13, color: '#8a8a86', marginBottom: 4 }}>Caixa</div>
-              <div style={{ fontSize: 22, fontWeight: 700, color: DARK }}>{fmt(cashBalance)}</div>
-              <div style={{ fontSize: 12, color: '#8a8a86', marginTop: 2 }}>Gastos hoje: {fmt(todayExpenses)}</div>
-            </Card>
-            {lowStock.length > 0 && (
-              <Card onClick={() => setTab('estoque')} style={{ background: '#FFF4E5', border: `1px solid ${ORANGE}`, cursor: 'pointer' }}>
-                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 8, color: ORANGE, fontWeight: 700, fontSize: 14 }}>⚠️ Estoque baixo</div>
-                  <span style={{ color: ORANGE, fontSize: 16 }}>›</span>
-                </div>
-                <div style={{ fontSize: 13, color: DARK, marginTop: 6 }}>{lowStock.map((p) => p.name).join(', ')} — {lowStock.length} produto(s) precisam de reposição</div>
-              </Card>
-            )}
-            <button onClick={() => setModal('venda')} style={bigButton(ORANGE)}>+ Registrar venda</button>
-            <Card>
-              <div style={{ fontSize: 13, color: '#8a8a86', marginBottom: 8 }}>Todas as vendas ({sales.length})</div>
-              <div style={{ maxHeight: 280, overflowY: 'auto' }}>
-              {sales.map((s) => (
-                <div key={s.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '6px 0', fontSize: 14, borderBottom: `1px solid ${GRAYLIGHT}` }}>
-                  <span>{s.productName} × {s.qty}</span>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                    <span style={{ fontWeight: 600 }}>{fmt(s.value)}</span>
-                    <button onClick={() => { if (window.confirm('Apagar essa venda? O estoque será devolvido.')) deleteSale(s.id); }} style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: 14 }}>🗑️</button>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                {['Quanto lucrei este mês?', 'Quais produtos estão acabando?', 'O que mais vendeu hoje?'].map((q) => (
+                  <div key={q} style={{ fontSize: 13, color: '#5a5a56', background: '#fff', borderRadius: 8, padding: '6px 10px' }}>
+                    "{q}"
                   </div>
-                </div>
-              ))}
-              {sales.length === 0 && <div style={{ fontSize: 13, color: '#8a8a86' }}>Nenhuma venda ainda</div>}
+                ))}
               </div>
             </Card>
           </div>
+        )}
+
+        {SUB_SCREENS.includes(tab) && (
+          <button
+            onClick={() => setTab('menu')}
+            style={{ display: 'flex', alignItems: 'center', gap: 6, background: 'none', border: 'none', cursor: 'pointer', color: '#8a8a86', fontSize: 13, marginBottom: 14, padding: 0 }}
+          >
+            <ArrowLeft size={16} /> Voltar ao menu
+          </button>
         )}
 
         {tab === 'produtos' && (
@@ -459,8 +411,12 @@ function App() {
                     <div style={{ fontSize: 12, color: GREEN, marginTop: 2 }}>Lucro por unidade: {fmt(p.sellPrice - p.buyPrice)}</div>
                   </div>
                   <div style={{ display: 'flex', gap: 6 }}>
-                    <button onClick={() => { setEditingProduct(p); setModal('produto'); }} style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: 15 }}>✏️</button>
-                    <button onClick={() => deleteProduct(p.id)} style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: 15 }}>🗑️</button>
+                    <button onClick={() => { setEditingProduct(p); setModal('produto'); }} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#8a8a86' }}>
+                      <Pencil size={18} />
+                    </button>
+                    <button onClick={() => deleteProduct(p.id)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#c0392b' }}>
+                      <Trash2 size={18} />
+                    </button>
                   </div>
                 </Card>
               ))}
@@ -475,11 +431,13 @@ function App() {
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                   <div>
                     <div style={{ fontWeight: 700, color: DARK }}>{p.name}</div>
-                    <div style={{ fontSize: 13, color: p.qty <= p.minQty ? ORANGE : '#8a8a86' }}>{p.qty} em estoque {p.qty <= p.minQty && '· repor!'}</div>
+                    <div style={{ fontSize: 13, color: p.qty <= p.minQty ? ORANGE : '#8a8a86' }}>
+                      {p.qty} em estoque {p.qty <= p.minQty && '· repor!'}
+                    </div>
                   </div>
                   <div style={{ display: 'flex', gap: 8 }}>
-                    <button onClick={() => adjustStock(p.id, -1)} style={smallBtn}>-1</button>
-                    <button onClick={() => adjustStock(p.id, 1)} style={smallBtn}>+1</button>
+                    <button onClick={() => adjustStock(p.id, -1)} style={{ ...smallBtn }}>-1</button>
+                    <button onClick={() => adjustStock(p.id, 1)} style={{ ...smallBtn }}>+1</button>
                     <button onClick={() => adjustStock(p.id, 10)} style={{ ...smallBtn, background: GREEN, color: '#fff' }}>+10</button>
                   </div>
                 </div>
@@ -497,7 +455,9 @@ function App() {
                   <span>{e.category}</span>
                   <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
                     <span style={{ fontWeight: 700, color: '#c0392b' }}>-{fmt(e.value)}</span>
-                    <button onClick={() => deleteExpense(e.id)} style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: 14 }}>🗑️</button>
+                    <button onClick={() => deleteExpense(e.id)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#8a8a86', display: 'flex' }}>
+                      <Trash2 size={15} />
+                    </button>
                   </div>
                 </Card>
               ))}
@@ -512,43 +472,112 @@ function App() {
               <div style={{ fontSize: 13, color: '#8a8a86', marginBottom: 8 }}>Período do balanço</div>
               <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
                 {Object.entries(PERIOD_LABELS).map(([key, label]) => (
-                  <button key={key} onClick={() => setBalancoPeriodo(key)} style={{ padding: '6px 12px', borderRadius: 20, border: `1px solid ${balancoPeriodo === key ? ORANGE : GRAYLIGHT}`, background: balancoPeriodo === key ? ORANGE : '#fff', color: balancoPeriodo === key ? '#fff' : DARK, fontSize: 12, fontWeight: 600, cursor: 'pointer' }}>{label}</button>
+                  <button
+                    key={key}
+                    onClick={() => setBalancoPeriodo(key)}
+                    style={{
+                      padding: '6px 12px', borderRadius: 20, border: `1px solid ${balancoPeriodo === key ? ORANGE : GRAYLIGHT}`,
+                      background: balancoPeriodo === key ? ORANGE : '#fff', color: balancoPeriodo === key ? '#fff' : DARK,
+                      fontSize: 12, fontWeight: 600, cursor: 'pointer',
+                    }}
+                  >
+                    {label}
+                  </button>
                 ))}
               </div>
             </Card>
+
             <Card style={{ textAlign: 'center' }}>
               <div style={{ fontSize: 13, color: '#8a8a86' }}>Faturamento no período</div>
               <div style={{ fontSize: 28, fontWeight: 800, color: DARK }}>{fmt(balancoTotal)}</div>
               <div style={{ fontSize: 12, color: '#8a8a86', marginTop: 2 }}>{balancoSales.length} venda(s) consideradas</div>
             </Card>
+
             <Card>
               <div style={{ fontSize: 13, fontWeight: 700, color: DARK, marginBottom: 10 }}>Como dividir esse dinheiro</div>
+
               <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
                 <AllocRow label="Lucro / reserva (intocável)" color={GREEN} pct={alloc.profit} onChange={(v) => updateAlloc('profit', v)} value={(balancoTotal * alloc.profit) / 100} />
                 <AllocRow label="Salário / custo com pessoal" color={ORANGE} pct={alloc.salary} onChange={(v) => updateAlloc('salary', v)} value={(balancoTotal * alloc.salary) / 100} />
                 <AllocRow label="Recompra de mercadoria" color={DARK} pct={alloc.restock} onChange={(v) => updateAlloc('restock', v)} value={(balancoTotal * alloc.restock) / 100} />
               </div>
-              <div style={{ marginTop: 12, fontSize: 12, color: allocSum === 100 ? '#8a8a86' : '#c0392b', fontWeight: allocSum === 100 ? 400 : 700 }}>Total definido: {allocSum}% {allocSum !== 100 && '— ajuste para somar 100%'}</div>
+
+              <div style={{ marginTop: 12, fontSize: 12, color: allocSum === 100 ? '#8a8a86' : '#c0392b', fontWeight: allocSum === 100 ? 400 : 700 }}>
+                Total definido: {allocSum}% {allocSum !== 100 && '— ajuste para somar 100%'}
+              </div>
             </Card>
+
+            <div style={{ fontSize: 12, color: '#8a8a86', padding: '0 4px' }}>
+              Essa divisão é uma orientação, não uma regra fixa — ajuste as porcentagens do jeito que fizer sentido pro seu negócio.
+            </div>
           </div>
         )}
 
         {tab === 'assistente' && (
           <div style={{ display: 'flex', flexDirection: 'column', height: 420 }}>
+            {chatMessages.length <= 1 && (
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginBottom: 10 }}>
+                {['Quanto lucrei hoje?', 'Quanto tenho em estoque?', 'Quais produtos estão acabando?', 'Quanto preciso vender para faturar R$1.000?'].map((q) => (
+                  <button
+                    key={q}
+                    onClick={() => handleChatSend(q)}
+                    style={{ fontSize: 12, padding: '6px 10px', borderRadius: 16, border: `1px solid ${GRAYLIGHT}`, background: '#fff', color: DARK, cursor: 'pointer' }}
+                  >
+                    {q}
+                  </button>
+                ))}
+              </div>
+            )}
             <div style={{ flex: 1, overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: 8, marginBottom: 10 }}>
               {chatMessages.map((m, i) => (
                 <div key={i} style={{ display: 'flex', flexDirection: m.role === 'user' ? 'row-reverse' : 'row', alignItems: 'flex-end', gap: 6, alignSelf: m.role === 'user' ? 'flex-end' : 'flex-start', maxWidth: '85%' }}>
                   {m.role === 'assistant' && <ZeAvatar size={22} />}
                   <div>
-                    {m.role === 'assistant' && <div style={{ fontSize: 11, color: '#8a8a86', marginBottom: 2, marginLeft: 4, fontWeight: 600 }}>{ASSISTANT_NAME}</div>}
-                    <div style={{ background: m.role === 'user' ? ORANGE : '#fff', color: m.role === 'user' ? '#fff' : DARK, padding: '10px 14px', borderRadius: 14, fontSize: 14, boxShadow: m.role === 'user' ? 'none' : '0 1px 3px rgba(0,0,0,0.06)' }}>{m.text}</div>
+                    {m.role === 'assistant' && (
+                      <div style={{ fontSize: 11, color: '#8a8a86', marginBottom: 2, marginLeft: 4, fontWeight: 600 }}>{ASSISTANT_NAME}</div>
+                    )}
+                    <div style={{
+                      background: m.role === 'user' ? ORANGE : '#fff',
+                      color: m.role === 'user' ? '#fff' : DARK,
+                      padding: '10px 14px', borderRadius: 14, fontSize: 14,
+                      boxShadow: m.role === 'user' ? 'none' : '0 1px 3px rgba(0,0,0,0.06)',
+                    }}>
+                      {m.text}
+                    </div>
                   </div>
                 </div>
               ))}
+              {chatLoading && (
+                <div style={{ alignSelf: 'flex-start', color: '#8a8a86', fontSize: 13, padding: '4px 14px' }}>Pensando…</div>
+              )}
+            </div>
+            <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: 6 }}>
+              <button onClick={() => setAudioOn((a) => !a)} style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: 12, color: '#8a8a86' }}>
+                {audioOn ? '🔊 Zé fala as respostas' : '🔇 Áudio desligado'}
+              </button>
             </div>
             <div style={{ display: 'flex', gap: 8 }}>
-              <input style={{ ...inputStyle, flex: 1 }} placeholder='Ex: "vendi 2 ovos por 20"' value={chatInput} onChange={(e) => setChatInput(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter') handleChatSend(); }} />
-              <button onClick={handleChatSend} style={{ background: ORANGE, border: 'none', borderRadius: 10, width: 44, color: '#fff', cursor: 'pointer', fontSize: 16 }}>➤</button>
+              <button
+                onClick={startListening}
+                disabled={chatLoading}
+                style={{ background: isListening ? '#c0392b' : GREEN, border: 'none', borderRadius: 10, width: 44, color: '#fff', cursor: 'pointer', fontSize: 16, flexShrink: 0 }}
+              >
+                🎤
+              </button>
+              <input
+                style={{ ...inputStyle, flex: 1 }}
+                placeholder={isListening ? 'Ouvindo…' : 'Ex: "vendi 2 ovos por 20"'}
+                value={chatInput}
+                onChange={(e) => setChatInput(e.target.value)}
+                onKeyDown={(e) => { if (e.key === 'Enter') handleChatSend(); }}
+              />
+              <button
+                onClick={() => handleChatSend()}
+                disabled={chatLoading}
+                style={{ background: ORANGE, border: 'none', borderRadius: 10, width: 44, color: '#fff', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}
+              >
+                <Send size={18} />
+              </button>
             </div>
           </div>
         )}
@@ -558,42 +587,141 @@ function App() {
             <Card style={{ marginBottom: 14, textAlign: 'center' }}>
               <div style={{ fontSize: 13, color: '#8a8a86' }}>Saldo atual</div>
               <div style={{ fontSize: 30, fontWeight: 800, color: GREEN }}>{fmt(cashBalance)}</div>
+              <div style={{ fontSize: 12, color: '#8a8a86', marginTop: 4 }}>Gastos hoje: {fmt(todayExpenses)}</div>
             </Card>
-            <button onClick={() => { const v = parseFloat(prompt('Valor da retirada (R$):') || '0'); if (v > 0) addManualCash({ type: 'saida', value: v, desc: 'Retirada' }); }} style={{ ...bigButton(DARK), marginBottom: 14 }}>Registrar retirada</button>
+            <div style={{ display: 'flex', gap: 8, marginBottom: 14 }}>
+              <button onClick={() => setModal('despesa')} style={{ ...bigButton(DARK), flex: 1, fontSize: 14, padding: '12px' }}>
+                + Nova saída
+              </button>
+              <button
+                onClick={() => {
+                  const v = parseFloat(prompt('Valor da retirada (R$):') || '0');
+                  if (v > 0) addManualCash({ type: 'saida', value: v, desc: 'Retirada' });
+                }}
+                style={{ ...bigButton('#fff'), flex: 1, color: DARK, border: `1px solid ${GRAYLIGHT}`, fontSize: 14, padding: '12px' }}
+              >
+                Retirada
+              </button>
+            </div>
+            <div style={{ fontSize: 13, color: '#8a8a86', marginBottom: 8 }}>Histórico financeiro</div>
             <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
               {[...sales.map((s) => ({ id: s.id, label: `Venda: ${s.productName}`, value: s.value, sign: 1 })),
                 ...expenses.map((e) => ({ id: e.id, label: `Despesa: ${e.category}`, value: e.value, sign: -1 })),
-                ...manualCash.map((m) => ({ id: m.id, label: m.desc || 'Movimentação', value: m.value, sign: m.type === 'entrada' ? 1 : -1 }))
+                ...manualCash.map((m) => ({ id: m.id, label: m.desc || 'Movimentação', value: m.value, sign: m.type === 'entrada' ? 1 : -1 })),
               ].map((item) => (
                 <div key={item.id} style={{ display: 'flex', justifyContent: 'space-between', fontSize: 14, padding: '6px 4px' }}>
-                  <span>{item.label}</span><span style={{ color: item.sign > 0 ? GREEN : '#c0392b', fontWeight: 600 }}>{item.sign > 0 ? '+' : '-'}{fmt(item.value)}</span>
+                  <span>{item.label}</span>
+                  <span style={{ color: item.sign > 0 ? GREEN : '#c0392b', fontWeight: 600 }}>
+                    {item.sign > 0 ? '+' : '-'}{fmt(item.value)}
+                  </span>
                 </div>
               ))}
+              {sales.length + expenses.length + manualCash.length === 0 && (
+                <div style={{ fontSize: 13, color: '#8a8a86' }}>Nenhuma movimentação ainda</div>
+              )}
+            </div>
+          </div>
+        )}
+
+        {tab === 'menu' && (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 18 }}>
+            <div>
+              <div style={{ fontSize: 12, color: '#8a8a86', fontWeight: 700, marginBottom: 8, textTransform: 'uppercase', letterSpacing: 0.5 }}>Meu negócio</div>
+              <Card style={{ padding: 0, overflow: 'hidden' }}>
+                {[
+                  { icon: Package, label: 'Produtos', tab: 'produtos' },
+                  { icon: Boxes, label: 'Estoque', tab: 'estoque' },
+                  { icon: Receipt, label: 'Despesas', tab: 'despesas' },
+                  { icon: PieChart, label: 'Divisão do dinheiro (Balanço)', tab: 'balanco' },
+                ].map((item, i, arr) => (
+                  <button
+                    key={item.label}
+                    onClick={() => setTab(item.tab)}
+                    style={{
+                      width: '100%', display: 'flex', alignItems: 'center', gap: 12, padding: '14px 16px',
+                      background: 'none', border: 'none', borderBottom: i < arr.length - 1 ? `1px solid ${GRAYLIGHT}` : 'none',
+                      cursor: 'pointer', textAlign: 'left',
+                    }}
+                  >
+                    <item.icon size={18} color={ORANGE} />
+                    <span style={{ flex: 1, fontSize: 14, color: DARK, fontWeight: 500 }}>{item.label}</span>
+                    <ChevronRight size={16} color="#8a8a86" />
+                  </button>
+                ))}
+              </Card>
+            </div>
+
+            <div>
+              <div style={{ fontSize: 12, color: '#8a8a86', fontWeight: 700, marginBottom: 8, textTransform: 'uppercase', letterSpacing: 0.5 }}>Conta</div>
+              <Card style={{ padding: 0, overflow: 'hidden' }}>
+                <button
+                  onClick={() => setModal('config')}
+                  style={{ width: '100%', display: 'flex', alignItems: 'center', gap: 12, padding: '14px 16px', background: 'none', border: 'none', cursor: 'pointer', textAlign: 'left' }}
+                >
+                  <Settings size={18} color={ORANGE} />
+                  <span style={{ flex: 1, fontSize: 14, color: DARK, fontWeight: 500 }}>Configurações e perfil</span>
+                  <ChevronRight size={16} color="#8a8a86" />
+                </button>
+              </Card>
+            </div>
+
+            <div>
+              <div style={{ fontSize: 12, color: '#8a8a86', fontWeight: 700, marginBottom: 8, textTransform: 'uppercase', letterSpacing: 0.5 }}>Em breve</div>
+              <Card style={{ padding: 0, overflow: 'hidden' }}>
+                {['Clientes', 'Relatórios', 'Exportar dados', 'Ajuda', 'Sobre o Organiza+'].map((label, i, arr) => (
+                  <div
+                    key={label}
+                    onClick={() => alert(`"${label}" ainda não está disponível — em breve!`)}
+                    style={{
+                      display: 'flex', alignItems: 'center', gap: 12, padding: '14px 16px', opacity: 0.5, cursor: 'pointer',
+                      borderBottom: i < arr.length - 1 ? `1px solid ${GRAYLIGHT}` : 'none',
+                    }}
+                  >
+                    <span style={{ flex: 1, fontSize: 14, color: DARK }}>{label}</span>
+                    <span style={{ fontSize: 11, color: '#8a8a86' }}>em breve</span>
+                  </div>
+                ))}
+              </Card>
             </div>
           </div>
         )}
       </div>
 
-      <div style={{ position: 'sticky', bottom: 0, background: '#fff', borderTop: `1px solid ${GRAYLIGHT}`, display: 'flex', padding: '6px 2px' }}>
-        <Tab emoji="🏠" label="Início" active={tab === 'inicio'} onClick={() => setTab('inicio')} />
-        <Tab emoji="📦" label="Produtos" active={tab === 'produtos'} onClick={() => setTab('produtos')} />
-        <Tab emoji="📊" label="Estoque" active={tab === 'estoque'} onClick={() => setTab('estoque')} />
-        <Tab emoji="🧾" label="Despesas" active={tab === 'despesas'} onClick={() => setTab('despesas')} />
-        <Tab emoji="💰" label="Caixa" active={tab === 'caixa'} onClick={() => setTab('caixa')} />
+      {/* menu inferior */}
+      <div style={{
+        position: 'sticky', bottom: 0, background: '#fff', borderTop: `1px solid ${GRAYLIGHT}`,
+        display: 'flex', padding: '6px 4px',
+      }}>
+        <Tab icon={Home} label="Início" active={tab === 'inicio'} onClick={() => setTab('inicio')} />
+        <Tab icon={Wallet} label="Caixa" active={tab === 'caixa'} onClick={() => setTab('caixa')} />
         <Tab avatar label={ASSISTANT_SHORT} active={tab === 'assistente'} onClick={() => setTab('assistente')} />
-        <Tab emoji="🥧" label="Balanço" active={tab === 'balanco'} onClick={() => setTab('balanco')} />
+        <Tab icon={MenuIcon} label="Menu" active={tab === 'menu' || SUB_SCREENS.includes(tab)} onClick={() => setTab('menu')} />
       </div>
 
-      {modal === 'boasvindas' && <WelcomeModal onConfirm={(name) => { persist({ ...data, userName: name }); setModal(null); }} />}
-      {modal === 'venda' && <VendaModal products={products} onClose={() => setModal(null)} onConfirm={(v) => { registerSale(v); setModal(null); }} />}
+      {modal === 'boasvindas' && (
+        <WelcomeModal onConfirm={(name) => { persist({ ...data, userName: name }); setModal(null); }} />
+      )}
+      {modal === 'venda' && (
+        <VendaModal products={products} onClose={() => setModal(null)} onConfirm={(v) => { registerSale(v); setModal(null); }} />
+      )}
+      {modal === 'compra' && (
+        <CompraModal products={products} onClose={() => setModal(null)} onConfirm={({ productId, qty }) => { adjustStock(productId, qty); setModal(null); }} />
+      )}
       {modal === 'produto' && (
         <ProdutoModal
           product={editingProduct}
           onClose={() => { setModal(null); setEditingProduct(null); }}
-          onConfirm={(p) => { if (editingProduct) updateProduct(editingProduct.id, p); else addProduct(p); setModal(null); setEditingProduct(null); }}
+          onConfirm={(p) => {
+            if (editingProduct) updateProduct(editingProduct.id, p);
+            else addProduct(p);
+            setModal(null);
+            setEditingProduct(null);
+          }}
         />
       )}
-      {modal === 'despesa' && <DespesaModal onClose={() => setModal(null)} onConfirm={(e) => { addExpense(e); setModal(null); }} />}
+      {modal === 'despesa' && (
+        <DespesaModal onClose={() => setModal(null)} onConfirm={(e) => { addExpense(e); setModal(null); }} />
+      )}
       {modal === 'config' && (
         <ConfigModal
           userName={data.userName}
@@ -606,7 +734,211 @@ function App() {
   );
 }
 
-ReactDOM.createRoot(document.getElementById('root')).render(<App />);
-</script>
-</body>
-</html>
+function ConfigModal({ userName, onClose, onSaveName, onReset }) {
+  const [name, setName] = useState(userName || '');
+  return (
+    <Modal title="Configurações" onClose={onClose}>
+      <Field label="Seu nome">
+        <input style={inputStyle} value={name} onChange={(e) => setName(e.target.value)} />
+      </Field>
+      <button style={{ ...bigButton(GREEN), marginBottom: 24 }} disabled={!name.trim()} onClick={() => onSaveName(name.trim())}>
+        Salvar nome
+      </button>
+
+      <div style={{ borderTop: `1px solid ${GRAYLIGHT}`, paddingTop: 20 }}>
+        <div style={{ fontSize: 13, fontWeight: 700, color: '#c0392b', marginBottom: 6 }}>Zona de risco</div>
+        <div style={{ fontSize: 13, color: '#8a8a86', marginBottom: 12 }}>
+          Isso apaga produtos, vendas, despesas e o caixa — tudo volta ao zero, como se o app fosse instalado agora.
+        </div>
+        <button style={{ ...bigButton('#c0392b') }} onClick={onReset}>
+          Zerar todos os dados
+        </button>
+      </div>
+    </Modal>
+  );
+}
+
+function AllocRow({ label, color, pct, value, onChange }) {
+  return (
+    <div>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 4 }}>
+        <span style={{ fontSize: 13, color: DARK }}>{label}</span>
+        <span style={{ fontSize: 14, fontWeight: 700, color }}>{fmt(value)}</span>
+      </div>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+        <input
+          type="range" min="0" max="100" value={pct}
+          onChange={(e) => onChange(parseInt(e.target.value))}
+          style={{ flex: 1, accentColor: color }}
+        />
+        <span style={{ fontSize: 12, color: '#8a8a86', width: 34, textAlign: 'right' }}>{pct}%</span>
+      </div>
+    </div>
+  );
+}
+
+const smallBtn = {
+  padding: '6px 10px', borderRadius: 8, border: `1px solid ${GRAYLIGHT}`, background: '#fff',
+  cursor: 'pointer', fontWeight: 700, fontSize: 13, color: DARK,
+};
+
+function WelcomeModal({ onConfirm }) {
+  const [name, setName] = useState('');
+  return (
+    <div style={{
+      position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.4)', display: 'flex',
+      alignItems: 'flex-end', justifyContent: 'center', zIndex: 50,
+    }}>
+      <div style={{
+        background: OFFWHITE, width: '100%', maxWidth: 480, borderRadius: '20px 20px 0 0', padding: 24,
+      }}>
+        <div style={{ fontSize: 20, fontWeight: 700, color: DARK, marginBottom: 6 }}>Bem-vindo(a) ao Organiza+</div>
+        <div style={{ fontSize: 14, color: '#8a8a86', marginBottom: 16 }}>Como você gostaria de ser chamado(a)?</div>
+        <input
+          autoFocus
+          style={inputStyle}
+          placeholder="Seu nome"
+          value={name}
+          onChange={(e) => setName(e.target.value)}
+          onKeyDown={(e) => { if (e.key === 'Enter' && name.trim()) onConfirm(name.trim()); }}
+        />
+        <button
+          style={{ ...bigButton(ORANGE), marginTop: 16 }}
+          disabled={!name.trim()}
+          onClick={() => onConfirm(name.trim())}
+        >
+          Começar
+        </button>
+      </div>
+    </div>
+  );
+}
+
+function CompraModal({ products, onClose, onConfirm }) {
+  const [productId, setProductId] = useState(products[0]?.id || '');
+  const [qty, setQty] = useState(1);
+
+  return (
+    <Modal title="Comprei mercadoria" onClose={onClose}>
+      <Field label="Produto">
+        <select style={inputStyle} value={productId} onChange={(e) => setProductId(e.target.value)}>
+          {products.map((p) => <option key={p.id} value={p.id}>{p.name} (estoque atual: {p.qty})</option>)}
+        </select>
+      </Field>
+      <Field label="Quantidade comprada">
+        <input type="number" min="1" style={inputStyle} value={qty} onChange={(e) => setQty(parseInt(e.target.value) || 1)} />
+      </Field>
+      <button
+        style={bigButton(GREEN)}
+        disabled={!productId || qty < 1}
+        onClick={() => onConfirm({ productId, qty })}
+      >
+        Adicionar ao estoque
+      </button>
+    </Modal>
+  );
+}
+
+function VendaModal({ products, onClose, onConfirm }) {
+  const [productId, setProductId] = useState(products[0]?.id || '');
+  const [qty, setQty] = useState(1);
+  const [payment, setPayment] = useState('Dinheiro');
+  const p = products.find((x) => x.id === productId);
+  const value = p ? p.sellPrice * qty : 0;
+
+  return (
+    <Modal title="Registrar venda" onClose={onClose}>
+      <Field label="Produto">
+        <select style={inputStyle} value={productId} onChange={(e) => setProductId(e.target.value)}>
+          {products.map((p) => <option key={p.id} value={p.id}>{p.name} (estoque: {p.qty})</option>)}
+        </select>
+      </Field>
+      <Field label="Quantidade">
+        <input type="number" min="1" style={inputStyle} value={qty} onChange={(e) => setQty(parseInt(e.target.value) || 1)} />
+      </Field>
+      <Field label="Forma de pagamento">
+        <select style={inputStyle} value={payment} onChange={(e) => setPayment(e.target.value)}>
+          <option>Dinheiro</option>
+          <option>Cartão</option>
+          <option>Pix</option>
+        </select>
+      </Field>
+      <div style={{ fontSize: 14, color: DARK, marginBottom: 14 }}>Total: <strong>{fmt(value)}</strong></div>
+      <button
+        style={bigButton(ORANGE)}
+        disabled={!p || qty < 1 || qty > (p?.qty || 0)}
+        onClick={() => onConfirm({ productId, qty, value, payment })}
+      >
+        Confirmar venda
+      </button>
+      {p && qty > p.qty && <div style={{ color: '#c0392b', fontSize: 13, marginTop: 8 }}>Quantidade maior que o estoque disponível</div>}
+    </Modal>
+  );
+}
+
+function ProdutoModal({ product, onClose, onConfirm }) {
+  const [name, setName] = useState(product?.name || '');
+  const [category, setCategory] = useState(product?.category || '');
+  const [buyPrice, setBuyPrice] = useState(product ? String(product.buyPrice) : '');
+  const [sellPrice, setSellPrice] = useState(product ? String(product.sellPrice) : '');
+  const [qty, setQty] = useState(product ? String(product.qty) : '');
+  const [minQty, setMinQty] = useState(product ? String(product.minQty) : '5');
+
+  const valid = name && buyPrice !== '' && sellPrice !== '' && qty !== '';
+
+  return (
+    <Modal title={product ? 'Editar produto' : 'Novo produto'} onClose={onClose}>
+      <Field label="Nome do produto"><input style={inputStyle} value={name} onChange={(e) => setName(e.target.value)} /></Field>
+      <Field label="Categoria (opcional)"><input style={inputStyle} value={category} onChange={(e) => setCategory(e.target.value)} /></Field>
+      <Field label="Preço de compra (R$)"><input type="number" style={inputStyle} value={buyPrice} onChange={(e) => setBuyPrice(e.target.value)} /></Field>
+      <Field label="Preço de venda (R$)"><input type="number" style={inputStyle} value={sellPrice} onChange={(e) => setSellPrice(e.target.value)} /></Field>
+      <Field label="Quantidade em estoque"><input type="number" style={inputStyle} value={qty} onChange={(e) => setQty(e.target.value)} /></Field>
+      <Field label="Estoque mínimo"><input type="number" style={inputStyle} value={minQty} onChange={(e) => setMinQty(e.target.value)} /></Field>
+      {buyPrice !== '' && sellPrice !== '' && (
+        <div style={{ fontSize: 13, color: GREEN, marginBottom: 14 }}>
+          Você lucra {fmt(parseFloat(sellPrice || 0) - parseFloat(buyPrice || 0))} em cada unidade vendida
+        </div>
+      )}
+      <button
+        style={bigButton(GREEN)}
+        disabled={!valid}
+        onClick={() => onConfirm({
+          name, category: category || 'Geral',
+          buyPrice: parseFloat(buyPrice), sellPrice: parseFloat(sellPrice),
+          qty: parseInt(qty), minQty: parseInt(minQty) || 5,
+        })}
+      >
+        {product ? 'Salvar alterações' : 'Salvar produto'}
+      </button>
+    </Modal>
+  );
+}
+
+function DespesaModal({ onClose, onConfirm }) {
+  const [category, setCategory] = useState('Aluguel');
+  const [value, setValue] = useState('');
+
+  return (
+    <Modal title="Nova despesa" onClose={onClose}>
+      <Field label="Categoria">
+        <select style={inputStyle} value={category} onChange={(e) => setCategory(e.target.value)}>
+          <option>Aluguel</option>
+          <option>Energia</option>
+          <option>Água</option>
+          <option>Funcionários</option>
+          <option>Transporte</option>
+          <option>Compras</option>
+          <option>Outras</option>
+        </select>
+      </Field>
+      <Field label="Valor (R$)"><input type="number" style={inputStyle} value={value} onChange={(e) => setValue(e.target.value)} /></Field>
+      <button
+        style={bigButton(GREEN)}
+        disabled={!value || parseFloat(value) <= 0}
+        onClick={() => onConfirm({ category, value: parseFloat(value) })}
+      >
+        Salvar despesa
+      </button>
+    </Modal>
+  );
+}
