@@ -1,4 +1,4 @@
-<!DOCTYPE html>
+      <!DOCTYPE html>
 <html lang="pt-BR">
 <head>
 <meta charset="UTF-8" />
@@ -30,7 +30,6 @@ const todayStr = () => new Date().toISOString().split('T')[0];
 const fmt = (n) => (n || 0).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
 const uid = () => Math.random().toString(36).slice(2, 10);
 
-// "Memória" do navegador, no mesmo formato que usávamos antes
 const storage = {
   async get(key) {
     const v = localStorage.getItem(key);
@@ -87,8 +86,8 @@ function Tab({ emoji, label, active, onClick }) {
       flex: 1, padding: '8px 0', background: 'none', border: 'none', cursor: 'pointer',
       color: active ? ORANGE : '#8a8a86',
     }}>
-      <span style={{ fontSize: 20 }}>{emoji}</span>
-      <span style={{ fontSize: 11, fontWeight: active ? 600 : 400 }}>{label}</span>
+      <span style={{ fontSize: 18 }}>{emoji}</span>
+      <span style={{ fontSize: 10, fontWeight: active ? 600 : 400 }}>{label}</span>
     </button>
   );
 }
@@ -162,16 +161,16 @@ function VendaModal({ products, onClose, onConfirm }) {
   );
 }
 
-function ProdutoModal({ onClose, onConfirm }) {
-  const [name, setName] = useState('');
-  const [category, setCategory] = useState('');
-  const [buyPrice, setBuyPrice] = useState('');
-  const [sellPrice, setSellPrice] = useState('');
-  const [qty, setQty] = useState('');
-  const [minQty, setMinQty] = useState('5');
+function ProdutoModal({ product, onClose, onConfirm }) {
+  const [name, setName] = useState(product?.name || '');
+  const [category, setCategory] = useState(product?.category || '');
+  const [buyPrice, setBuyPrice] = useState(product ? String(product.buyPrice) : '');
+  const [sellPrice, setSellPrice] = useState(product ? String(product.sellPrice) : '');
+  const [qty, setQty] = useState(product ? String(product.qty) : '');
+  const [minQty, setMinQty] = useState(product ? String(product.minQty) : '5');
   const valid = name && buyPrice !== '' && sellPrice !== '' && qty !== '';
   return (
-    <Modal title="Novo produto" onClose={onClose}>
+    <Modal title={product ? 'Editar produto' : 'Novo produto'} onClose={onClose}>
       <Field label="Nome do produto"><input style={inputStyle} value={name} onChange={(e) => setName(e.target.value)} /></Field>
       <Field label="Categoria (opcional)"><input style={inputStyle} value={category} onChange={(e) => setCategory(e.target.value)} /></Field>
       <Field label="Preço de compra (R$)"><input type="number" style={inputStyle} value={buyPrice} onChange={(e) => setBuyPrice(e.target.value)} /></Field>
@@ -181,7 +180,9 @@ function ProdutoModal({ onClose, onConfirm }) {
       {buyPrice !== '' && sellPrice !== '' && (
         <div style={{ fontSize: 13, color: GREEN, marginBottom: 14 }}>Você lucra {fmt(parseFloat(sellPrice || 0) - parseFloat(buyPrice || 0))} em cada unidade vendida</div>
       )}
-      <button style={bigButton(GREEN)} disabled={!valid} onClick={() => onConfirm({ name, category: category || 'Geral', buyPrice: parseFloat(buyPrice), sellPrice: parseFloat(sellPrice), qty: parseInt(qty), minQty: parseInt(minQty) || 5 })}>Salvar produto</button>
+      <button style={bigButton(GREEN)} disabled={!valid} onClick={() => onConfirm({ name, category: category || 'Geral', buyPrice: parseFloat(buyPrice), sellPrice: parseFloat(sellPrice), qty: parseInt(qty), minQty: parseInt(minQty) || 5 })}>
+        {product ? 'Salvar alterações' : 'Salvar produto'}
+      </button>
     </Modal>
   );
 }
@@ -198,6 +199,21 @@ function DespesaModal({ onClose, onConfirm }) {
       </Field>
       <Field label="Valor (R$)"><input type="number" style={inputStyle} value={value} onChange={(e) => setValue(e.target.value)} /></Field>
       <button style={bigButton(GREEN)} disabled={!value || parseFloat(value) <= 0} onClick={() => onConfirm({ category, value: parseFloat(value) })}>Salvar despesa</button>
+    </Modal>
+  );
+}
+
+function ConfigModal({ userName, onClose, onSaveName, onReset }) {
+  const [name, setName] = useState(userName || '');
+  return (
+    <Modal title="Configurações" onClose={onClose}>
+      <Field label="Seu nome"><input style={inputStyle} value={name} onChange={(e) => setName(e.target.value)} /></Field>
+      <button style={{ ...bigButton(GREEN), marginBottom: 24 }} disabled={!name.trim()} onClick={() => onSaveName(name.trim())}>Salvar nome</button>
+      <div style={{ borderTop: `1px solid ${GRAYLIGHT}`, paddingTop: 20 }}>
+        <div style={{ fontSize: 13, fontWeight: 700, color: '#c0392b', marginBottom: 6 }}>Zona de risco</div>
+        <div style={{ fontSize: 13, color: '#8a8a86', marginBottom: 12 }}>Isso apaga produtos, vendas, despesas e o caixa — tudo volta ao zero, como se o app fosse instalado agora.</div>
+        <button style={bigButton('#c0392b')} onClick={onReset}>Zerar todos os dados</button>
+      </div>
     </Modal>
   );
 }
@@ -222,6 +238,7 @@ function App() {
   const [loaded, setLoaded] = useState(false);
   const [tab, setTab] = useState('inicio');
   const [modal, setModal] = useState(null);
+  const [editingProduct, setEditingProduct] = useState(null);
   const [balancoPeriodo, setBalancoPeriodo] = useState('mes');
 
   useEffect(() => {
@@ -262,8 +279,10 @@ function App() {
   const lowStock = products.filter((p) => p.qty <= p.minQty);
 
   const addProduct = (p) => persist({ ...data, products: [...products, { ...p, id: uid() }] });
+  const updateProduct = (id, changes) => persist({ ...data, products: products.map((p) => (p.id === id ? { ...p, ...changes } : p)) });
   const deleteProduct = (id) => persist({ ...data, products: products.filter((p) => p.id !== id) });
   const adjustStock = (id, delta) => persist({ ...data, products: products.map((p) => (p.id === id ? { ...p, qty: Math.max(0, p.qty + delta) } : p)) });
+
   const registerSale = ({ productId, qty, value, payment }) => {
     const p = products.find((x) => x.id === productId);
     if (!p) return;
@@ -271,15 +290,32 @@ function App() {
     const sale = { id: uid(), productId, productName: p.name, qty, value, payment, profit, date: todayStr() };
     persist({ ...data, sales: [sale, ...sales], products: products.map((x) => (x.id === productId ? { ...x, qty: Math.max(0, x.qty - qty) } : x)) });
   };
+  const deleteSale = (id) => {
+    const sale = sales.find((s) => s.id === id);
+    if (!sale) return;
+    persist({ ...data, sales: sales.filter((s) => s.id !== id), products: products.map((p) => (p.id === sale.productId ? { ...p, qty: p.qty + sale.qty } : p)) });
+  };
+
   const updateAlloc = (field, val) => persist({ ...data, alloc: { ...alloc, [field]: val } });
   const addExpense = (e) => persist({ ...data, expenses: [{ ...e, id: uid(), date: todayStr() }, ...expenses] });
+  const deleteExpense = (id) => persist({ ...data, expenses: expenses.filter((e) => e.id !== id) });
   const addManualCash = (m) => persist({ ...data, manualCash: [{ ...m, id: uid(), date: todayStr() }, ...manualCash] });
+
+  const resetAllData = () => {
+    if (window.confirm('Isso vai apagar TODOS os dados (produtos, vendas, despesas, caixa) e não pode ser desfeito. Confirma?')) {
+      persist(seed);
+      setModal('boasvindas');
+    }
+  };
 
   return (
     <div style={{ fontFamily: '"Nunito Sans", system-ui, sans-serif', background: OFFWHITE, minHeight: '100vh', maxWidth: 480, margin: '0 auto' }}>
-      <div style={{ background: ORANGE, padding: '18px 20px', color: '#fff' }}>
-        <div style={{ fontSize: 13, opacity: 0.9 }}>{data.userName ? `Olá, ${data.userName}! 👋` : 'Olá! 👋'}</div>
-        <div style={{ fontSize: 20, fontWeight: 700 }}>Organiza+</div>
+      <div style={{ background: ORANGE, padding: '18px 20px', color: '#fff', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+        <div>
+          <div style={{ fontSize: 13, opacity: 0.9 }}>{data.userName ? `Olá, ${data.userName}! 👋` : 'Olá! 👋'}</div>
+          <div style={{ fontSize: 20, fontWeight: 700 }}>Organiza+</div>
+        </div>
+        <button onClick={() => setModal('config')} style={{ background: 'rgba(255,255,255,0.2)', border: 'none', borderRadius: 10, width: 36, height: 36, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', color: '#fff', fontSize: 18 }}>⚙️</button>
       </div>
 
       <div style={{ padding: 16, paddingBottom: 90 }}>
@@ -308,8 +344,12 @@ function App() {
             <Card>
               <div style={{ fontSize: 13, color: '#8a8a86', marginBottom: 8 }}>Últimas vendas</div>
               {sales.slice(0, 5).map((s) => (
-                <div key={s.id} style={{ display: 'flex', justifyContent: 'space-between', padding: '6px 0', fontSize: 14, borderBottom: `1px solid ${GRAYLIGHT}` }}>
-                  <span>{s.productName} × {s.qty}</span><span style={{ fontWeight: 600 }}>{fmt(s.value)}</span>
+                <div key={s.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '6px 0', fontSize: 14, borderBottom: `1px solid ${GRAYLIGHT}` }}>
+                  <span>{s.productName} × {s.qty}</span>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                    <span style={{ fontWeight: 600 }}>{fmt(s.value)}</span>
+                    <button onClick={() => { if (window.confirm('Apagar essa venda? O estoque será devolvido.')) deleteSale(s.id); }} style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: 14 }}>🗑️</button>
+                  </div>
                 </div>
               ))}
               {sales.length === 0 && <div style={{ fontSize: 13, color: '#8a8a86' }}>Nenhuma venda ainda</div>}
@@ -319,7 +359,7 @@ function App() {
 
         {tab === 'produtos' && (
           <div>
-            <button onClick={() => setModal('produto')} style={{ ...bigButton(GREEN), marginBottom: 14 }}>+ Novo produto</button>
+            <button onClick={() => { setEditingProduct(null); setModal('produto'); }} style={{ ...bigButton(GREEN), marginBottom: 14 }}>+ Novo produto</button>
             <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
               {products.map((p) => (
                 <Card key={p.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
@@ -328,7 +368,10 @@ function App() {
                     <div style={{ fontSize: 12, color: '#8a8a86' }}>{p.category} · Estoque: {p.qty}</div>
                     <div style={{ fontSize: 12, color: GREEN, marginTop: 2 }}>Lucro por unidade: {fmt(p.sellPrice - p.buyPrice)}</div>
                   </div>
-                  <button onClick={() => deleteProduct(p.id)} style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: 16 }}>🗑️</button>
+                  <div style={{ display: 'flex', gap: 6 }}>
+                    <button onClick={() => { setEditingProduct(p); setModal('produto'); }} style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: 15 }}>✏️</button>
+                    <button onClick={() => deleteProduct(p.id)} style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: 15 }}>🗑️</button>
+                  </div>
                 </Card>
               ))}
             </div>
@@ -360,8 +403,12 @@ function App() {
             <button onClick={() => setModal('despesa')} style={{ ...bigButton(GREEN), marginBottom: 14 }}>+ Nova despesa</button>
             <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
               {expenses.map((e) => (
-                <Card key={e.id} style={{ display: 'flex', justifyContent: 'space-between' }}>
-                  <span>{e.category}</span><span style={{ fontWeight: 700, color: '#c0392b' }}>-{fmt(e.value)}</span>
+                <Card key={e.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                  <span>{e.category}</span>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                    <span style={{ fontWeight: 700, color: '#c0392b' }}>-{fmt(e.value)}</span>
+                    <button onClick={() => deleteExpense(e.id)} style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: 14 }}>🗑️</button>
+                  </div>
                 </Card>
               ))}
               {expenses.length === 0 && <div style={{ fontSize: 13, color: '#8a8a86' }}>Nenhuma despesa registrada</div>}
@@ -393,7 +440,6 @@ function App() {
               </div>
               <div style={{ marginTop: 12, fontSize: 12, color: allocSum === 100 ? '#8a8a86' : '#c0392b', fontWeight: allocSum === 100 ? 400 : 700 }}>Total definido: {allocSum}% {allocSum !== 100 && '— ajuste para somar 100%'}</div>
             </Card>
-            <div style={{ fontSize: 12, color: '#8a8a86', padding: '0 4px' }}>Essa divisão é uma orientação, não uma regra fixa — ajuste as porcentagens do jeito que fizer sentido pro seu negócio.</div>
           </div>
         )}
 
@@ -418,7 +464,7 @@ function App() {
         )}
       </div>
 
-      <div style={{ position: 'sticky', bottom: 0, background: '#fff', borderTop: `1px solid ${GRAYLIGHT}`, display: 'flex', padding: '6px 4px' }}>
+      <div style={{ position: 'sticky', bottom: 0, background: '#fff', borderTop: `1px solid ${GRAYLIGHT}`, display: 'flex', padding: '6px 2px' }}>
         <Tab emoji="🏠" label="Início" active={tab === 'inicio'} onClick={() => setTab('inicio')} />
         <Tab emoji="📦" label="Produtos" active={tab === 'produtos'} onClick={() => setTab('produtos')} />
         <Tab emoji="📊" label="Estoque" active={tab === 'estoque'} onClick={() => setTab('estoque')} />
@@ -429,8 +475,22 @@ function App() {
 
       {modal === 'boasvindas' && <WelcomeModal onConfirm={(name) => { persist({ ...data, userName: name }); setModal(null); }} />}
       {modal === 'venda' && <VendaModal products={products} onClose={() => setModal(null)} onConfirm={(v) => { registerSale(v); setModal(null); }} />}
-      {modal === 'produto' && <ProdutoModal onClose={() => setModal(null)} onConfirm={(p) => { addProduct(p); setModal(null); }} />}
+      {modal === 'produto' && (
+        <ProdutoModal
+          product={editingProduct}
+          onClose={() => { setModal(null); setEditingProduct(null); }}
+          onConfirm={(p) => { if (editingProduct) updateProduct(editingProduct.id, p); else addProduct(p); setModal(null); setEditingProduct(null); }}
+        />
+      )}
       {modal === 'despesa' && <DespesaModal onClose={() => setModal(null)} onConfirm={(e) => { addExpense(e); setModal(null); }} />}
+      {modal === 'config' && (
+        <ConfigModal
+          userName={data.userName}
+          onClose={() => setModal(null)}
+          onSaveName={(name) => { persist({ ...data, userName: name }); setModal(null); }}
+          onReset={resetAllData}
+        />
+      )}
     </div>
   );
 }
@@ -438,4 +498,6 @@ function App() {
 ReactDOM.createRoot(document.getElementById('root')).render(<App />);
 </script>
 </body>
-</html>
+</html>  
+
+      
